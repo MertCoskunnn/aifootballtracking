@@ -3,10 +3,10 @@
 > Durum: Fikir netleştirme (v0.1, 2026-09-23). Çalışma adı, isim sonra seçilecek.
 
 ## Tek cümlede
-Telefonla çekilmiş bir futbol videosunu veya duruş fotoğrafını analiz eden bir uygulama. İskeleti çıkarır, şut, pas ve duruş tekniğini puanlar, bir hoca gibi "şunu düzelt" der.
+Telefonla çekilmiş bir şut ya da pas videosunu analiz eden bir uygulama. İskeleti çıkarır, top tekniğini puanlar, bir hoca gibi "şunu düzelt" der.
 
 ## İlham
-TikTok'ta tracking sistemiyle basketbol antrenmanı yapan, atışlarını analiz eden içerikler. Bu projede futbol versiyonunu ve basit bir postür analizini yapıyoruz. Asıl amaç YouTube içeriği: yapay zekayı bir hoca gibi kullanmak.
+TikTok'ta tracking sistemiyle basketbol antrenmanı yapan, atışlarını analiz eden içerikler. Bu projede futbol versiyonunu yapıyoruz. Asıl amaç YouTube içeriği: yapay zekayı bir hoca gibi kullanmak.
 
 ## Nasıl çalışır? (yeni başlayana)
 1. **Göz:** Bir "poz tahmini" modeli, videonun her karesinde vücudun 33 noktasını bulur: omuz, dirsek, kalça, diz, ayak bileği vb. Bu, oyuncunun üzerine çizilmiş bir çöp adam gibi düşünülebilir.
@@ -24,26 +24,30 @@ TikTok'ta tracking sistemiyle basketbol antrenmanı yapan, atışlarını analiz
 
 > Doğrulanacak: MediaPipe'ın güncel JS paket adı ve sürümü ilk checkpoint'te kontrol edilecek.
 
-## Modüller ve sıra
-1. **M0: Video → iskelet** (temel). Video yükle, üstüne iskeleti çiz, kare kare ilerle. Her şey bunun üstüne kurulu.
-2. **M1: Postür analizi** (en kolay, hızlı sonuç). Önden ve yandan birer fotoğraf. Ölçümler: omuz eğimi, kalça eğimi, baş öne kayma, diz içe çökme. Çıktı: basit bir rapor kartı.
-3. **M2: Şut analizi.** Yandan çekilmiş video. Ölçümler: destek ayağının topa mesafesi, şut anında gövde açısı, diz ve ayak bileği kilidi, takip hareketi. Çıktı: 0–100 puan ve 2–3 düzeltme önerisi.
-4. **M3: Pas analizi.** Şut modülünün iç taraf versiyonu: ayak açısı, gövdenin hedefe dönüklüğü.
-5. **M4: Hoca katmanı.** Puanları karakterli, esprili bir hoca diline çeviren katman. İçerik için en eğlenceli kısım.
+## Kapsam (Mert'in kararı, 2026-09-23)
+Uygulama **yalnızca top tekniği** üzerine: şut ve pas. Postür analizi kapsamdan çıktı. Modül ayrımı yok, tek bir uygulama. Teknik kurallar: [RESEARCH.md](RESEARCH.md)
+
+## Yol haritası (checkpoint'ler)
+- **cp-00-plan:** Plan ✅
+- **cp-01-arastirma:** Doğru şut ve pas tekniği araştırması, ölçüm tablosu ✅
+- **cp-02-iskelet:** Video yükle → iskeleti çiz → kare kare ilerle
+- **cp-03-olcum:** Temas anını ve topu işaretle → açıları ve mesafeleri hesapla
+- **cp-04-hoca:** Kurallarla 0–100 puan ve düzeltme önerileri (şut + pas)
+- **cp-05-kalibrasyon:** Mert'in gerçek videolarıyla eşikleri ayarlama *(Mert gerekli)*
+- **cp-06-otomatik:** Temas anını ve topu otomatik bulma (ileri seviye)
+- **cp-07-hoca-kisiligi:** Hoca dili ve karakteri (içerik için)
+- **cp-08-yayin:** GitHub Pages'te yayın
 
 ## Sınırlar (dürüst olalım)
 - **Tek kamera = 2D.** Derinliği tahmin ederiz, ölçemeyiz. Doğru sonuç için çekim açısı kuralı gerekir: yandan, sabit telefon, tüm vücut kadrajda.
-- **"Teşhis" değil "gözlem".** Postür modülü tıbbi teşhis koymaz, "şu tarafın eğik görünüyor" der ve bir uyarı notu gösterir. Hem etik hem hukuki olarak doğrusu bu.
 - **Hızlı hareket.** Şut anı 1–2 kareye düşebilir. Mümkünse 60 fps çekim önerilir.
 
 ## İçerik açısı (not)
 Video kurgusu anlatım odaklı ve sinematik olacak, ekran kaydı ağırlıklı olmayacak. Güçlü anlar: "AI hocam şutumu 43 aldı", postür sonucunu kendi üzerinde gösterme, önce/sonra karşılaştırması. Kurgu ayrıca düşünülecek.
 
 ## Mert'in karar vermesi gerekenler
-1. İlk modül: **Postür (M1)** mü, **Şut (M2)** mi? Önerim: M0 + M1. En hızlı "vay" anını verir, şut modülünün altyapısını da hazırlar.
-2. Proje adı.
-3. GitHub reposu: `github.com/new` üzerinden private, boş repo açılıp linki verilecek.
-4. Test videoları: Mert'in kendi şut ve pas videoları (yandan, 60 fps varsa).
+1. Proje adı (repo: `aifootballtracking`)
+2. Test videoları: Mert'in kendi şut ve pas videoları (yandan, 60 fps varsa)
 
 ## Çalışma parametreleri (Mert, 2026-09-23)
 - Her şey ücretsiz. Ücretli servis yok.
