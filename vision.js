@@ -19,12 +19,21 @@ async function load() {
   const fs = await FilesetResolver.forVisionTasks(BASE);
   // IMAGE modu: kareleri sırayla ama bağımsız işleriz. VIDEO modu kesin artan zaman damgası ister,
   // bu da aynı videoyu ikinci kez işlerken ya da ileri-geri atlarken hata verir.
-  const [pose, ball] = await Promise.all([
+  // poseOne: kırpılmış tek kişilik görüntüler için. Uzak/kalabalık çekimde (Messi–Liverpool yayını,
+  // oyuncular ~120 px) tam kare iskelet modeli hiç kimse bulamadı. Nesne modeli ise insanları kutu
+  // olarak buldu. Kutuyu kırpıp büyütünce iskelet çıktı (0 → 3-5 kişi/kare).
+  // Aynı nesne modeli hem topu hem insanı arar (tek çağrı).
+  const [pose, poseOne, ball] = await Promise.all([
     PoseLandmarker.createFromOptions(fs, { baseOptions: { modelAssetPath: POSE_MODEL, delegate: 'GPU' }, runningMode: 'IMAGE', numPoses: 3 }),
-    ObjectDetector.createFromOptions(fs, { baseOptions: { modelAssetPath: BALL_MODEL, delegate: 'GPU' }, runningMode: 'IMAGE', categoryAllowlist: ['sports ball'], scoreThreshold: 0.12, maxResults: 3 }),
+    PoseLandmarker.createFromOptions(fs, { baseOptions: { modelAssetPath: POSE_MODEL, delegate: 'GPU' }, runningMode: 'IMAGE', numPoses: 1 }),
+    ObjectDetector.createFromOptions(fs, { baseOptions: { modelAssetPath: BALL_MODEL, delegate: 'GPU' }, runningMode: 'IMAGE', categoryAllowlist: ['sports ball', 'person'], scoreThreshold: 0.12, maxResults: 25 }),
   ]);
-  return (models = { pose, ball });
+  return (models = { pose, poseOne, ball });
 }
+
+const isBall = (d) => d.categories[0].categoryName === 'sports ball';
+const PERSON_MIN_SCORE = 0.3;
+const MAX_PERSON_CROPS = 8;
 
 function seek(video, t) {
   return new Promise((res) => {
@@ -43,7 +52,7 @@ function seek(video, t) {
  * Dönen: kare listesi.
  */
 export async function processRange(video, { t0 = 0, t1 = video.duration, fps = 30, onFrame, shouldStop } = {}) {
-  const { pose, ball } = await load();
+  const { pose, poseOne, ball } = await load();
   const W = video.videoWidth, H = video.videoHeight;
   // Kareyi önce bir tuvale çizeriz: hem iskelet hem top aynı kareden okunur,
   // hem de kırpıntılar bu tuvalden kesilir.
@@ -60,14 +69,33 @@ export async function processRange(video, { t0 = 0, t1 = video.duration, fps = 3
     await seek(video, Math.min(video.duration - 0.001, t));
     fctx.drawImage(video, 0, 0, W, H);
     const people = pose.detect(frameCv).landmarks.map((p) => p.map((q) => ({ x: q.x * W, y: q.y * H, v: q.visibility ?? 1 })));
-    const balls = ball.detect(frameCv).detections.map((d) => box(d, 0, 0, 1));
-    // Kırpıntılar: her kişinin ayak çevresi + topun son bilinen yeri
+    const dets = ball.detect(frameCv).detections;
+    const balls = dets.filter(isBall).map((d) => box(d, 0, 0, 1));
+    // İki aşamalı iskelet: nesne modelinin bulduğu ama iskeleti henüz çıkmamış her kişi kutusunu
+    // kırpıp büyüt, tek kişilik iskelet modeline ver, noktaları tam kareye geri çevir.
+    // Güvene göre sırala, boya göre değil: Liverpool yayınında Messi baraja yakın ve arkada kaldığı
+    // için boyca 9.-10. sıradaydı ve hiç işlenmiyordu. Oysa en yüksek güvenli kutulardan biriydi (0.67).
+    const personBoxes = dets
+      .filter((d) => !isBall(d) && d.categories[0].score >= PERSON_MIN_SCORE && d.boundingBox.height >= 40)
+      .sort((a, b) => b.categories[0].score - a.categories[0].score)
+      .map((d) => d.boundingBox)
+      .slice(0, MAX_PERSON_CROPS);
+    for (const b of personBoxes) {
+      const covered = people.some((p) => inBox(hipMid(p), b));
+      if (covered) continue;
+      const s = Math.max(b.width, b.height) * 1.3, x0 = b.originX + b.width / 2 - s / 2, y0 = b.originY + b.height / 2 - s / 2;
+      cctx.clearRect(0, 0, CROP, CROP);
+      cctx.drawImage(frameCv, x0, y0, s, s, 0, 0, CROP, CROP);
+      const found = poseOne.detect(cropCv).landmarks[0];
+      if (found) people.push(found.map((q) => ({ x: x0 + q.x * s, y: y0 + q.y * s, v: q.visibility ?? 1 })));
+    }
+    // Top kırpıntıları: her kişinin ayak çevresi + topun son bilinen yeri
     const regions = people.map(feetRegion);
     if (lastBall) regions.push({ x: lastBall.x, y: lastBall.y, s: Math.max(160, lastBall.w * 8) });
     for (const r of regions) {
       cctx.clearRect(0, 0, CROP, CROP);
       cctx.drawImage(frameCv, r.x - r.s / 2, r.y - r.s / 2, r.s, r.s, 0, 0, CROP, CROP);
-      for (const d of ball.detect(cropCv).detections) balls.push(box(d, r.x - r.s / 2, r.y - r.s / 2, r.s / CROP));
+      for (const d of ball.detect(cropCv).detections.filter(isBall)) balls.push(box(d, r.x - r.s / 2, r.y - r.s / 2, r.s / CROP));
     }
     const merged = dedupe(balls);
     const bestNear = merged.sort((a, b) => b.s - a.s)[0];
@@ -78,6 +106,9 @@ export async function processRange(video, { t0 = 0, t1 = video.duration, fps = 3
   }
   return frames;
 }
+
+const hipMid = (p) => ({ x: (p[23].x + p[24].x) / 2, y: (p[23].y + p[24].y) / 2 });
+const inBox = (pt, b) => pt.x >= b.originX && pt.x <= b.originX + b.width && pt.y >= b.originY && pt.y <= b.originY + b.height;
 
 // Kişinin ayak çevresi: iki ayak bileğinin ortası, kenar = 2.5 bacak boyu (en az 160 px)
 function feetRegion(p) {

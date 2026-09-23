@@ -84,13 +84,29 @@ export function buildTrack(frames, contact, ball) {
   const start = pick(frames[contact] || [], feet);
   if (!start) return track;
   track[contact] = start;
+  // Kalabalık/arkadan çekimde (Messi–Liverpool yayını) sadece "kalçaya en yakın" seçimi, oyuncu
+  // arkadaki biriyle çakışınca iskeleti ona kaydırıyordu. Artık üç şart var:
+  //   1) Konum: kalça, geçen kare sayısıyla orantılı bir yarıçap içinde (kare başına ≤ 0.6 bacak boyu)
+  //   2) Boyut sürekliliği: aynı kişi bir karede %25'ten fazla büyüyüp küçülmez
+  //   3) Kısa kayıplar: kişi birkaç kare bulunamazsa takip kopmaz, son görüldüğü yerden devam eder
+  // Aday = konum farkı + boyut farkı cezası en küçük olan.
+  const size = (p) => Math.max(legLength(p, 'left'), legLength(p, 'right')) || 1;
+  const MAX_GAP = 8;
   for (const step of [-1, 1]) {
-    let last = start;
+    let last = start, lastI = contact;
     for (let i = contact + step; i >= 0 && i < frames.length; i += step) {
-      const next = pick(frames[i] || [], (p) => d2(hipOf(p), hipOf(last)));
-      // Kalça bir karede bacak boyundan fazla sıçradıysa bu başka biri, o kareyi boş bırak
-      const leg = legLength(last, 'left');
-      if (next && d2(hipOf(next), hipOf(last)) < leg * leg) { track[i] = next; last = next; }
+      const gap = Math.abs(i - lastI);
+      if (gap > MAX_GAP) break;
+      const leg = size(last);
+      let best = null, bestCost = Infinity;
+      for (const p of frames[i] || []) {
+        const move = Math.sqrt(d2(hipOf(p), hipOf(last))) / leg;
+        const scale = size(p) / leg;
+        if (move > 0.6 * gap || scale < 0.75 || scale > 1.33) continue;
+        const cost = move + 2 * Math.abs(Math.log(scale));
+        if (cost < bestCost) { bestCost = cost; best = p; }
+      }
+      if (best) { track[i] = best; last = best; lastI = i; }
     }
   }
   return track;

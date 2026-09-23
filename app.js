@@ -3,11 +3,11 @@
 // uygulama vuruşları kendisi bulur (uzun videolarda iki geçişli tarama), bir liste gösterir, kullanıcı
 // bir vuruşa tıklar. Elle işaretleme akışı hâlâ var: hem "vuruş bulunamadı" durumunda hem de
 // otomatik sonucu düzeltmek isteyen kullanıcı için bir yedek yol ("Elle düzelt").
-import { processRange } from './vision.js?v=10';
-import { findKicks, classifyView, suggestMode } from './detect.js?v=10';
-import { candidateWindows } from './scan.js?v=10';
-import { measure, measureFreeKick, buildTrack } from './metrics.js?v=10';
-import { evaluate } from './coach.js?v=10';
+import { processRange } from './vision.js?v=11';
+import { findKicks, classifyView, suggestMode } from './detect.js?v=11';
+import { candidateWindows } from './scan.js?v=11';
+import { measure, measureFreeKick, buildTrack } from './metrics.js?v=11';
+import { evaluate } from './coach.js?v=11';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');

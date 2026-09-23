@@ -287,3 +287,23 @@ test('buildTrack: oyuncu bir karede kaybolursa o kare null kalır, takip devam e
     assert.equal(track[i], kickerPoses[i], `kare ${i} takip kırıldı`);
   }
 });
+
+// Kalabalık/arkadan çekim (Messi–Liverpool yayını): oyuncu bir karede bulunamayınca takip,
+// kalçası yakın ama boyu çok farklı başka birine (öndeki büyük oyuncu) atlıyordu.
+// Artık boyu %25'ten fazla farklı kişi reddedilir ve kısa kayıptan sonra takip asıl oyuncuyla devam eder.
+test('buildTrack: kısa kayıpta boyu farklı yakındaki kişiye atlamaz, oyuncu geri gelince devam eder', () => {
+  const inputs = { dir: 1, trunk: 0, supportKnee: 30, kickKnee: 20, side: 'right' };
+  const frames = [];
+  for (let i = 0; i < 12; i++) {
+    const player = buildPose({ ...inputs, hipX: 1000 + i * 4 });
+    // Yakında duran, 1.6 kat büyük (kameraya yakın) başka biri
+    const big = buildPose({ ...inputs, hipX: 1000 + i * 4 + 30 }).map((q) => ({ ...q, x: 1030 + i * 4 + (q.x - (1030 + i * 4)) * 1.6, y: q.y * 1.6 - 300 }));
+    frames.push(i === 6 || i === 7 ? [big] : [player, big]); // 6-7. karelerde oyuncu bulunamadı
+  }
+  const contact = 3;
+  const p = frames[contact][0];
+  const tr = buildTrack(frames, contact, { x: p[LM.toe.right].x, y: p[LM.toe.right].y });
+  assert.equal(tr[6], null, '6. karede büyük kişiye atlamamalı');
+  assert.equal(tr[7], null, '7. karede büyük kişiye atlamamalı');
+  assert.equal(tr[9], frames[9][0], 'oyuncu geri gelince takip ona devam etmeli');
+});
