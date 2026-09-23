@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Futbol AI Hoca</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Futbol AI Hoca</h1>
+    <p class="sub">Şutunu ya da pasını yükle, iskeletini çıkaralım, hoca puanlasın.</p>
+  </header>
+
+  <main>
+    <section class="panel" id="setup">
+      <label class="file">
+        <input type="file" id="file" accept="video/*">
+        <span>Video seç</span>
+      </label>
+      <div class="row">
+        <label>Hareket
+          <select id="mode">
+            <option value="shot">Şut (ayak üstü)</option>
+            <option value="pass">Pas (iç taraf)</option>
+          </select>
+        </label>
+        <label>Vuran ayak
+          <select id="foot">
+            <option value="right">Sağ</option>
+            <option value="left">Sol</option>
+          </select>
+        </label>
+        <label>Kare hızı (fps)
+          <select id="fps">
+            <option value="30">30</option>
+            <option value="60">60</option>
+          </select>
+        </label>
+      </div>
+      <p class="hint">Çekim: tam yandan, telefon sabit, tüm vücut ve top kadrajda.</p>
+    </section>
+
+    <section class="panel stage-wrap" id="stageWrap" hidden>
+      <div class="stage">
+        <video id="video" playsinline muted></video>
+        <canvas id="canvas"></canvas>
+      </div>
+      <div class="status" id="status"></div>
+      <div class="controls">
+        <button id="prev" title="Önceki kare">◀</button>
+        <input type="range" id="scrub" min="0" max="0" value="0">
+        <button id="next" title="Sonraki kare">▶</button>
+        <span id="frameLabel">0 / 0</span>
+      </div>
+      <ol class="steps">
+        <li>Kaydırıcıyla ayağın topa <b>değdiği kareyi</b> bul → <button id="markContact">Temas karesi bu</button></li>
+        <li>Bu karede <b>topun üstüne tıkla</b> → <span id="ballLabel">top işaretlenmedi</span></li>
+        <li><button id="analyze" class="primary" disabled>Hoca, analiz et</button></li>
+      </ol>
+    </section>
+
+    <section class="panel" id="report" hidden></section>
+  </main>
+
+  <footer>Video cihazından çıkmaz. Analiz tarayıcında yapılır. <a href="RESEARCH.md">Kurallar nereden geliyor?</a></footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

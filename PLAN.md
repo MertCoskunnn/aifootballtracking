@@ -22,7 +22,7 @@ TikTok'ta tracking sistemiyle basketbol antrenmanı yapan, atışlarını analiz
 | Hoca yorumları | Kural tabanlı şablonlar (bizim yazdığımız eşikler) | Ücretsiz, açıklanabilir, videoda anlatması kolay ("hoca şu kurala bakıyor"). LLM ile yorum sonra, ücretsiz bir seçenek bulunursa. |
 | Sunucu | Yok. Statik site: GitHub Pages / Vercel ücretsiz | Maliyet sıfır. |
 
-> Doğrulanacak: MediaPipe'ın güncel JS paket adı ve sürümü ilk checkpoint'te kontrol edilecek.
+> Doğrulandı: `@mediapipe/tasks-vision@1.0.1`, model tarayıcıda yükleniyor ve çalışıyor.
 
 ## Kapsam (Mert'in kararı, 2026-09-23)
 Uygulama **yalnızca top tekniği** üzerine: şut ve pas. Postür analizi kapsamdan çıktı. Modül ayrımı yok, tek bir uygulama. Teknik kurallar: [RESEARCH.md](RESEARCH.md)
@@ -30,9 +30,7 @@ Uygulama **yalnızca top tekniği** üzerine: şut ve pas. Postür analizi kapsa
 ## Yol haritası (checkpoint'ler)
 - **cp-00-plan:** Plan ✅
 - **cp-01-arastirma:** Doğru şut ve pas tekniği araştırması, ölçüm tablosu ✅
-- **cp-02-iskelet:** Video yükle → iskeleti çiz → kare kare ilerle
-- **cp-03-olcum:** Temas anını ve topu işaretle → açıları ve mesafeleri hesapla
-- **cp-04-hoca:** Kurallarla 0–100 puan ve düzeltme önerileri (şut + pas)
+- **cp-02-iskelet:** Video yükle → iskelet → temas ve top işaretleme → ölçüm → 0–100 puan ve öneriler (şut + pas) ✅ *(gerçek videoyla test bekliyor)*
 - **cp-05-kalibrasyon:** Mert'in gerçek videolarıyla eşikleri ayarlama *(Mert gerekli)*
 - **cp-06-otomatik:** Temas anını ve topu otomatik bulma (ileri seviye)
 - **cp-07-hoca-kisiligi:** Hoca dili ve karakteri (içerik için)
