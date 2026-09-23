@@ -21,14 +21,18 @@
 ### Ölçülecek şeyler (yandan çekim, 2D)
 | # | Ölçüm | Doğru teknik | Neden önemli | Güven |
 |---|---|---|---|---|
-| Ş1 | **Destek ayağının topa ön-arka mesafesi** | Ayak topun hizasında ya da hafif gerisinde | Destek ayağı topun ne kadar önündeyse top o kadar yükselir | [K] Lees ve ark. 2010 |
-| Ş2 | **Destek dizi bükülmesi** | Basışta ~26°, vuruş anında ~42° bükük. Kilitli (düz) değil, yumuşak | Şok emilimi ve denge | [K] |
-| Ş3 | **Gövde açısı (vuruş anı)** | Alçak ve sert şut için gövde topun üstünde, hafif öne eğik. Geriye yaslanmak = top havalanır | Topun yüksekliğini en çok bu belirler | [L] |
-| Ş4 | **Geri salınımdaki diz bükülmesi** | Belirgin büküş ("kurma"). Az büküş = zayıf şut | Kamçı etkisinin menzili | [L] eşik [T] ~90°+ büküş |
-| Ş5 | **Vuruş anında diz** | Diz neredeyse açılmış ama tam kilitlenmemiş. Temas, maksimum açılmadan hemen önce | Hızın zirvesi | [L] |
-| Ş6 | **Ayak bileği kilidi** | Parmak ucu aşağı, bilek sabit | Enerji topa kaybolmadan geçer | [L] (2D'de sınırlı ölçülür) |
-| Ş7 | **Karşı kol** | Vuruş bacağının karşı kolu yana açık (denge ve "germe yayı") | Gövde rotasyonu ve denge | [L] Shan & Westerhoff 2005 |
-| Ş8 | **Takip** | Vuruş ayağı temastan sonra hedefe doğru yükselir, erken kesilmez | Hızı korur, isabeti artırır | [L] |
+> **Güncelleme (2026-09-23 gece):** Aşağıdaki tablo asıl makale metinleri okunarak düzeltildi. Seçilen eşikler, Messi ve Mert değerleriyle birlikte [METRICS.md](METRICS.md)'de. Bir önceki sürümde Ş1 ve Ş3 hatalıydı. Neyin neden değiştiği satır içinde yazıyor.
+
+| # | Ölçüm | Doğru teknik | Neden önemli | Güven |
+|---|---|---|---|---|
+| Ş1 | **Destek ayağının topa ön-arka mesafesi** | Destek topuğu topun biraz gerisinde, bacak boyunun ~%5-45'i kadar (elit oyuncularda topuk-top merkezi 0.10-0.33 m) | Denge ve temas noktası | [K] sayı Petrolo 2024 (Alcock 2012), eksen tanımı belirsiz. **Düzeltme:** "öndeyse top yükselir" iddiası Lees 2010 metninde yok. Metin, destek ayağı yerleşiminin "az araştırıldığını" söylüyor |
+| Ş2 | **Destek dizi bükülmesi** | Basışta ~26°, temasta 21-42° bükük. Kilitli (düz) değil | Şok emilimi ve denge | [K] Lees 2010 (26°/42°), Petrolo 2024 (elit erkek 21.4 ± 7.4°) |
+| Ş3 | **Gövde açısı (temas anı)** | **Dik ya da hafif geriye yaslanmış: 0-17° geriye.** Çok geriye (>~18°) yaslanmak topu havalandırır | Topun yüksekliği | [K] Lees 2010: yetenekli oyuncular alçak şutta 13°, yüksek şutta 17° geriye, profesyoneller 12° ve 0°. Petrolo 2024: elit 5.8 ± 8.3° geriye. **Düzeltme:** önceki "hafif öne eğik" kuralı yanlıştı |
+| Ş4 | **Geri salınımdaki diz bükülmesi** | Belirgin büküş ("kurma"), ~90° civarı | Kamçı etkisinin menzili | [K] Petrolo 2024: maksimum diz büküşü 93.3 ± 5.2° |
+| Ş5 | **Temas anında vuran diz** | Hâlâ **35-55° bükük**. Diz temastan sonra açılmaya devam eder | Hızın zirvesi (en yüksek diz hızı ~57°'de) | [K] Petrolo 2024: elit erkek 35.3 ± 10.0 – 55.0 ± 7.5°. **Uyarı:** diz ~1160°/s açıldığı için 30 fps'de ölçüm kare başına ~39° oynar |
+| Ş6 | **Ayak bileği kilidi** | Parmak ucu aşağı, bilek sabit | Enerji topa kaybolmadan geçer | [L] (2D'de ölçülemez, puana girmez) |
+| Ş7 | **Karşı kol** | Temastan önce yana açık (~35-110°), temasa doğru kapanır | Gövde rotasyonu ve "germe yayı" | [K] Petrolo 2024: temasta 48.2 ± 11.7°. Lees 2010 / Shan & Westerhoff 2005: kol önce açılır, sonra kapanır |
+| Ş8 | **Takip** | Uyluk temastan sonra belirgin öne kalkar (kalça fleksiyonu ~65-125°) | Hızı korur, isabeti artırır | [K] Petrolo 2024: takip sonunda kalça fleksiyonu 97 ± 16° (erkek) |
 
 ## 2. Pas (Side-Foot / İç Taraf)
 - İç taraf vuruşu hız karşılığında **isabet** sağlar. En isabetli vuruşlar en düşük ayak ve top hızında görüldü (ayak ~3.6 m/s, top ~8 m/s, ~2.7° sapma). **[K]**
@@ -80,7 +84,7 @@
 |---|---|---|---|---|
 | F1 | **Yaklaşma açısı (proxy)** | Temastan önceki ~10 karede kalça-orta noktasının izlediği yön, görüntü dikeyinden ~20–45° sapmalı (diyagonal koşu). Dümdüz (0°'a yakın) yaklaşım | Diyagonal yaklaşım pelvis rotasyonunu ve ayağın topun altına/yanına girmesini sağlar, düz koşu ayağı merkeze kilitler | [L] genel bulgu, eşik [T] (arkadan kamera açısı proxy'si bizim tasarımımız, laboratuvar ölçümüyle birebir değil) |
 | F2 | **Destek ayağının topa yanal mesafesi** | Topun biraz yanında ve hafif dışında, bacak boyuna oranla küçük bir pozitif değer (destek-dışı yönde). Ayak tam topun altında (0'a çok yakın) ya da çok uzakta değil | Çok yakın ayak vuruş bacağının salınım alanını keser, çok uzak ayak dengeyi ve isabeti bozar | [K] mesafe etkisi (Tandfonline 2020), sayısal eşik [T] |
-| F3 | **Gövdenin yana yatışı** | Vuruş anında gövde vuruş bacağı tarafına hafifçe yatık (10–30°) | Kaynak yana yatışın topa temas noktasını optimize etmede kilit strateji olduğunu doğruluyor, ama hangi yöne ve kaç derece net yazmıyor | [K] yana yatış önemli (Tandfonline 2020), **yön ve sayısal aralık [T]** — bizim mühendislik tahminimiz |
+| F3 | **Gövdenin yana yatışı** | Temas anında gövde **vuruş yapmayan (destek) tarafa** ~5-22° yatık | Eğri koşu vücudu yana yatırır. Böylece ayak topun altına girer ve diz daha açık vurabilir | [K] Lees 2010: profesyonellerde temasta vuruş yapmayan tarafa 10° ve 16°. Messi (arkadan fotoğraf): destek tarafına ~9°. **Düzeltme (2026-09-23 gece):** ilk sürüm yönü "vuruş bacağı tarafı" diye tahmin etmişti, bu ters |
 | F4 | **Kurma (geri salınımda diz bükülmesi)** | Belirgin büküş, şuttekine yakın (~90°+). Az büküş = zayıf dönüş ve zayıf spin | Kamçı etkisinin menzili, şuttekiyle aynı prensip | [L] eşik [T] (Ş4 ile aynı kaynak ve aynı sebep) |
 | F5 | **Takibin çaprazlaması** | Temastan sonra vuruş ayağı bileği, destek ayağın karşı tarafına (gövdenin önünden çapraz) geçer; bacak boyuna oranlı belirgin bir pozitif çaprazlama | Çapraz "sarma" takip, topa dışmerkezli temasın ve spin üretiminin dışarıdan görülebilir işareti | [L] coaching konsensüsü + off-centre impact literatürü (Asai 2002), sayısal eşik [T] |
 
