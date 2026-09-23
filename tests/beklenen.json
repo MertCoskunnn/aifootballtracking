@@ -1,0 +1,41 @@
+{
+  "_not": "cp-10-regresyon: bu dosya tests/regresyon.html'in okuduğu beklentiler. Videolar test-videolar/ altında (git'e girmez, yerelde var). Zaman ±toleranceSec sapabilir, puan tam eşit olmalı (analysis.js#withinTolerance).",
+  "toleranceSec": 0.15,
+  "videos": [
+    {
+      "id": "messi-antrenman",
+      "label": "Messi antrenman frikiği",
+      "file": "Lionel Messi Amazing Freekick Goal in Training _ HD.mp4",
+      "expected": { "tSec": 6.10, "foot": "left", "view": "side", "mode": "shot", "score": 100 }
+    },
+    {
+      "id": "mert-k1",
+      "label": "Mert K1 (68 sn'lik video)",
+      "candidates": [
+        "WhatsApp Video 2026-09-23 at 15.08.39.mp4",
+        "WhatsApp Video 2026-09-23 at 15.09.51.mp4"
+      ],
+      "durationApprox": 68,
+      "_not": "Hangi WhatsApp dosyasının K1 olduğu bilinmiyor: regresyon.js gerçek süreye bakıp eşleştirir (analysis.js#matchByDuration).",
+      "expected": { "tSec": 1.90, "foot": "right", "view": "side", "mode": "shot", "score": 82 }
+    },
+    {
+      "id": "mert-k2",
+      "label": "Mert K2 (5 dk'lık video)",
+      "candidates": [
+        "WhatsApp Video 2026-09-23 at 15.08.39.mp4",
+        "WhatsApp Video 2026-09-23 at 15.09.51.mp4"
+      ],
+      "durationApprox": 300,
+      "_not": "Hangi WhatsApp dosyasının K2 olduğu bilinmiyor: regresyon.js gerçek süreye bakıp eşleştirir (analysis.js#matchByDuration).",
+      "expected": { "tSec": 144.60, "foot": "right", "view": "side", "mode": "shot", "score": 88 }
+    },
+    {
+      "id": "messi-liverpool",
+      "label": "Messi - Liverpool 2019 UCL (sadece bilgi)",
+      "file": "Messi Goal vs Liverpool 2019 UCL - Slow Motion 1080p.mp4",
+      "infoOnly": true,
+      "_not": "Arkadan çekim; BlazePose sırtı dönük Messi'yi bulamıyor (vision.js'teki not, 2026-09-23). Beklenti yok: kişi başına iskelet sayısı ortalaması ve en az 1 iskelet olan kare oranı raporlanır."
+    }
+  ]
+}

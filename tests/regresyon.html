@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Regresyon kontrolü — Futbol AI Hoca</title>
+  <!-- cp-10-regresyon: aynı style.css'i kullanır (renk değişkenleri), sadece tablo için birkaç
+       ek kural burada, style.css'e dokunmuyoruz (o dosya asıl uygulamanın arayüzüne ait). -->
+  <link rel="stylesheet" href="../style.css?v=12">
+  <style>
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: .85rem; }
+    th, td { text-align: left; padding: 6px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+    tr.pass td:last-child { color: var(--pitch); font-weight: 700; }
+    tr.fail td:last-child { color: var(--bad); font-weight: 700; }
+    tr.pass { background: rgba(61, 220, 132, .06); }
+    tr.fail { background: rgba(255, 93, 93, .08); }
+    td.skip { color: var(--muted); font-style: italic; }
+    td.info { color: var(--muted); }
+    .stage { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+    .stage video { width: 240px; background: #000; border-radius: 8px; }
+    .stage canvas { width: 240px; background: #000; border-radius: 8px; }
+    #summary { font-weight: 700; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Regresyon kontrolü</h1>
+    <p class="sub">Referans klipler için "Messi hâlâ 100 mü, Mert hâlâ 82/88 mi" kontrolü — tek tık.</p>
+  </header>
+  <main>
+    <section class="panel">
+      <p class="hint">
+        Mod: <b id="modLabel"></b> (değiştirmek için URL'e <code>?mod=tam</code> ya da <code>?mod=pencere</code> ekle).
+        Otomatik başlatmak için <code>?auto=1</code>.
+      </p>
+      <button id="runBtn" class="primary">Taramayı başlat</button>
+      <div class="stage">
+        <video id="video" muted playsinline></video>
+        <canvas id="canvas" width="240" height="135"></canvas>
+      </div>
+      <p class="status" id="status"></p>
+    </section>
+
+    <section class="panel">
+      <table id="results">
+        <thead>
+          <tr>
+            <th>Video</th><th>Zaman: beklenen/bulunan (sn)</th><th>Ayak</th><th>Açı</th><th>Mod</th>
+            <th>Puan</th><th>Ş1..Ş8</th><th>Süre (sn)</th><th>Sonuç</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <p id="summary"></p>
+    </section>
+  </main>
+  <script type="module" src="regresyon.js"></script>
+</body>
+</html>

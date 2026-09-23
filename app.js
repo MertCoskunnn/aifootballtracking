@@ -3,20 +3,18 @@
 // uygulama vuruşları kendisi bulur (uzun videolarda iki geçişli tarama), bir liste gösterir, kullanıcı
 // bir vuruşa tıklar. Elle işaretleme akışı hâlâ var: hem "vuruş bulunamadı" durumunda hem de
 // otomatik sonucu düzeltmek isteyen kullanıcı için bir yedek yol ("Elle düzelt").
-import { processRange } from './vision.js?v=11';
-import { findKicks, classifyView, suggestMode } from './detect.js?v=11';
-import { candidateWindows } from './scan.js?v=11';
-import { measure, measureFreeKick, buildTrack } from './metrics.js?v=11';
-import { evaluate } from './coach.js?v=11';
+// cp-10-regresyon: tarama/analiz mantığı buradan pipeline.js'e taşındı. Neden: uygulama ve
+// tarayıcıda çalışan regresyon kontrol sayfası (tests/regresyon.html) AYNI kodu çalıştırmalı,
+// yoksa "Messi hâlâ 100 mü" kontrolü sadece burada doğru, orada yanlış olabilir. Bu dosyada artık
+// sadece arayüz ve akış var; tarama adımlarının kendisi pipeline.js'te.
+import * as pipeline from './pipeline.js?v=12';
+import { measure, measureFreeKick, buildTrack } from './metrics.js?v=12';
+import { evaluate } from './coach.js?v=12';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');
 const canvas = $('canvas');
 const ctx = canvas.getContext('2d');
-
-const DENSE_FPS = 30; // pas 2: her aday pencere bu hızda işlenir (findKicks bunun üstünde ayarlandı)
-const COARSE_FPS = 5; // pas 1: videonun tamamı bu ucuz hızda taranır
-const SHORT_VIDEO_MAX = 8; // saniye: bunun altındaki videolar tek geçişte (dense) taranır, kaba pas atlanır
 
 // frames: şu an ekranda/track'te olan vision.js kare listesi [{t,people,balls}, ...]
 // (bir vuruşun kendi penceresi, ya da elle-düzelt için ilk birkaç saniye).
@@ -28,6 +26,7 @@ function setStatus(t) { $('status').textContent = t; }
 
 // Videoyu belli bir ana götürür. Tarayıcı bazen 'seeked' olayını atlar (aynı zamana sarma gibi),
 // o yüzden 1 saniyelik yedek süre var: işlem asla sonsuza kadar beklemez.
+// (pipeline.js'in kendi seek'i tarama akışı için; bu, show()'un oynatma/kare gösterimi için.)
 function seek(t) {
   return new Promise((res) => {
     if (Math.abs(video.currentTime - t) < 1e-4 && video.readyState >= 2) return res();
@@ -36,16 +35,6 @@ function seek(t) {
     video.addEventListener('seeked', done, { once: true });
     video.currentTime = t;
   });
-}
-
-// Bazı videolar (telefon kayıtları, webm) süresini baştan söylemez (Infinity).
-// Videoyu çok ileri sarınca tarayıcı gerçek süreyi öğrenir.
-async function realDuration() {
-  if (Number.isFinite(video.duration)) return video.duration;
-  await seek(1e7);
-  const d = video.duration;
-  await seek(0);
-  return Number.isFinite(d) ? d : video.currentTime;
 }
 
 // İşlem sırasında tüm kontroller kilitli: kullanıcı işlemin ortasında videoyu başka yere atlatamasın.
@@ -59,14 +48,13 @@ function setBusy(b) {
   if (!b) updateReady();
 }
 
-// --- otomatik tarama: iki geçiş (cp-07-otomatik, bkz. scan.js) ---
+// --- otomatik tarama: iki geçiş (cp-07-otomatik, mantığı artık pipeline.js'te, bkz. scan.js) ---
 
-// Videonun [t0,t1) aralığını fps hızında işler; ilerleme/kalan süre durum satırına yazılır,
-// her kare canlı olarak (henüz oyuncu seçilmeden) tuvale çizilir.
+// pipeline.runPass'i ilerleme çubuğu/durum metni ve canlı çizimle sarar. Sadece "Elle düzelt"
+// akışının ilk 8 saniyeyi hazırlaması için kullanılıyor artık (scanVideo tamamen pipeline'da).
 function runPass(t0, t1, fps, label) {
   const started = performance.now();
-  return processRange(video, {
-    t0, t1, fps,
+  return pipeline.runPass(video, t0, t1, fps, {
     shouldStop: () => state.stopRequested,
     onFrame: (frame, i, total) => {
       drawLive(frame);
@@ -95,18 +83,6 @@ function drawBalls(frame, s) {
   }
 }
 
-// findKicks + classifyView + suggestMode'u bir pencerenin yoğun karelerine uygular,
-// bulunan vuruşları state.kicks'e ekler. Her vuruş kendi 'frames' penceresini taşır ki
-// listeden tıklanınca o pencere tekrar oynatılabilsin.
-function collectKicks(denseFrames) {
-  const kicks = findKicks(denseFrames, DENSE_FPS);
-  for (const k of kicks) {
-    const view = classifyView(denseFrames, k, DENSE_FPS);
-    const suggestion = suggestMode(view.view);
-    state.kicks.push({ ...k, frames: denseFrames, fps: DENSE_FPS, t: denseFrames[k.contact].t, view, suggestion, score: null });
-  }
-}
-
 // Vuruş bulunamadığında (ya da video çok kısa/otomatik hiçbir şey vermediğinde) elle işaretleme
 // akışına düşer: ilk 8 sn'yi (ya da zaten elde varsa o kareleri) yoğun işler ve ekrana yükler.
 async function fallbackManual(existingFrames) {
@@ -114,8 +90,8 @@ async function fallbackManual(existingFrames) {
   let frames = existingFrames;
   if (!frames) {
     setStatus('Vuruş bulunamadı, ilk 8 sn elle işaretlemen için hazırlanıyor…');
-    const dur = await realDuration();
-    frames = await runPass(0, Math.min(SHORT_VIDEO_MAX, dur), DENSE_FPS, 'Hazırlanıyor');
+    const dur = await pipeline.realDuration(video);
+    frames = await runPass(0, Math.min(pipeline.SHORT_VIDEO_MAX, dur), pipeline.DENSE_FPS, 'Hazırlanıyor');
   }
   loadFrames(frames, null);
   show(0);
@@ -123,8 +99,18 @@ async function fallbackManual(existingFrames) {
   setStatus('Vuruş bulunamadı. Elle işaretleyebilirsin: aşağıdaki adımları izle.');
 }
 
+// Bir geçişin (kaba/yoğun) başlarken gösterilen tek seferlik mesaj: pipeline.scanVideo bize
+// sadece kare başına ilerleme (onProgress) verir, "bu geçiş başlıyor" anını etiketten çıkarırız.
+function passStartText(label) {
+  if (label === 'Taranıyor') return 'Kısa video: tek geçişte taranıyor…';
+  if (label === 'Kaba tarama') return '1/2: Video hızlıca taranıyor (kaba geçiş, 5 fps)…';
+  return `2/2: ${label} inceleniyor (yoğun geçiş, 30 fps)…`; // label = "Aday n/total"
+}
+
 // Ana tarama akışı. Kısa videolarda tek yoğun geçiş; uzun videolarda önce kaba geçiş, sonra
 // sadece aday pencereler yoğun işlenir (5 dk'lık videoyu baştan sona 30 fps işlemek imkansız).
+// Adımların kendisi artık pipeline.scanVideo'da: burada sadece ilerleme/durum metnini çiziyor
+// ve sonucu (kicks / fallbackFrames / stopped) ekrana yansıtıyoruz.
 async function scanVideo() {
   setBusy(true);
   state.kicks = [];
@@ -135,37 +121,34 @@ async function scanVideo() {
   $('report').hidden = true;
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
-  const dur = await realDuration();
 
-  try {
-    if (dur <= SHORT_VIDEO_MAX) {
-      setStatus('Kısa video: tek geçişte taranıyor…');
-      const dense = await runPass(0, dur, DENSE_FPS, 'Taranıyor');
-      if (state.stopRequested) { setStatus('Durduruldu.'); setBusy(false); return; }
-      collectKicks(dense);
-      if (!state.kicks.length) { await fallbackManual(dense); setBusy(false); return; }
-    } else {
-      setStatus('1/2: Video hızlıca taranıyor (kaba geçiş, 5 fps)…');
-      const coarse = await runPass(0, dur, COARSE_FPS, 'Kaba tarama');
-      if (state.stopRequested) { setStatus('Durduruldu.'); setBusy(false); return; }
-      const windows = candidateWindows(coarse);
-      if (!windows.length) { await fallbackManual(null); setBusy(false); return; }
-      let n = 0;
-      for (const w of windows) {
-        n++;
-        setStatus(`2/2: Aday an ${n}/${windows.length} inceleniyor (yoğun geçiş, 30 fps)…`);
-        const t0 = Math.max(0, w.t0), t1 = Math.min(dur, w.t1);
-        const dense = await runPass(t0, t1, DENSE_FPS, `Aday ${n}/${windows.length}`);
-        if (state.stopRequested) break;
-        collectKicks(dense);
-      }
-      if (!state.kicks.length) { await fallbackManual(null); setBusy(false); return; }
+  let started = performance.now();
+  let lastLabel = null;
+  const onProgress = (label, i, total) => {
+    if (label !== lastLabel) {
+      started = performance.now();
+      lastLabel = label;
+      setStatus(passStartText(label));
+      if (i === 0) return; // geçiş başlarken tek seferlik mesaj görünsün, hemen %0 ile ezilmesin
     }
+    const pct = Math.round(((i + 1) / total) * 100);
+    const elapsed = (performance.now() - started) / 1000;
+    const left = Math.round((elapsed / (i + 1)) * (total - i - 1));
+    $('progressBar').style.width = pct + '%';
+    setStatus(`${label}: %${pct} (${i + 1}/${total} kare), kalan ~${left} sn.`);
+  };
+
+  let result;
+  try {
+    result = await pipeline.scanVideo(video, { shouldStop: () => state.stopRequested, onFrame: drawLive, onProgress });
   } catch (err) {
     setStatus('Hata: ' + err.message);
     setBusy(false);
     return;
   }
+  if (result.stopped) { setStatus('Durduruldu.'); setBusy(false); return; }
+  if (!result.kicks.length) { await fallbackManual(result.fallbackFrames); setBusy(false); return; }
+  state.kicks = result.kicks;
   setBusy(false);
   renderKickList();
   // İlk vuruşu hemen aç. Eskiden sadece liste çıkıyordu, hiçbir vuruş yüklenmiyordu: oynat
@@ -436,18 +419,28 @@ function renderKickList() {
 
 // --- analiz ---
 
+// Otomatik tespit edilmiş bir vuruş (activeKick) yüklüyse pipeline.analyzeKick kullanılır: aynı
+// buildTrack+measure/measureFreeKick+evaluate zincirini regresyon sayfasıyla birebir paylaşır.
+// "Elle düzelt" akışında (activeKick yok) kullanıcı temas/topu kendi seçtiği için ortada bir
+// "kick" nesnesi yok; o yüzden ölçüm doğrudan metrics.js/coach.js ile yapılır.
 function runAnalysis() {
   if (state.contact === null || !state.ball || !state.track) return;
   const mode = effectiveMode();
   const foot = effectiveFoot();
   try {
-    // Frikik arkadan kamerayla ölçülür (measureFreeKick), şut/pas yandan (measure)
-    // measure() temas civarındaki pencereleri (Ş5/Ş7/Ş8) saniyeye çevirmek için fps ister:
-    // burada her zaman yoğun geçişin (DENSE_FPS) karelerini kullanıyoruz.
-    const m = mode === 'freekick'
-      ? measureFreeKick(state.track, state.contact, state.ball, foot)
-      : measure(state.track, state.contact, state.ball, foot, DENSE_FPS);
-    const res = evaluate(m, mode);
+    let res;
+    if (state.activeKick) {
+      const a = pipeline.analyzeKick(state.activeKick, { mode, foot });
+      state.track = a.track;
+      res = a.result;
+    } else {
+      // measure() temas civarındaki pencereleri (Ş5/Ş7/Ş8) saniyeye çevirmek için fps ister:
+      // burada her zaman yoğun geçişin (DENSE_FPS) karelerini kullanıyoruz.
+      const m = mode === 'freekick'
+        ? measureFreeKick(state.track, state.contact, state.ball, foot)
+        : measure(state.track, state.contact, state.ball, foot, pipeline.DENSE_FPS);
+      res = evaluate(m, mode);
+    }
     if (state.activeKick) { state.activeKick.score = res.total; renderKickList(); }
     renderReport(res, mode, viewWarning(mode));
   } catch (err) { setStatus(err.message); }
