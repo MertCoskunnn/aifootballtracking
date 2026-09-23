@@ -1,7 +1,7 @@
 // Uygulama katmanı: video → iskelet (MediaPipe) → ölçüm → hoca.
 import { PoseLandmarker, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/vision_bundle.mjs';
-import { measure, buildTrack } from './metrics.js';
-import { evaluate } from './coach.js';
+import { measure, buildTrack } from './metrics.js?v=5';
+import { evaluate } from './coach.js?v=5';
 
 const WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm';
 const MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task';
@@ -29,44 +29,109 @@ async function getLandmarker() {
 
 function setStatus(t) { $('status').textContent = t; }
 
+// Videoyu belli bir ana götürür. Tarayıcı bazen 'seeked' olayını atlar (aynı zamana sarma gibi),
+// o yüzden 1 saniyelik yedek süre var: işlem asla sonsuza kadar beklemez.
 function seek(t) {
   return new Promise((res) => {
-    video.addEventListener('seeked', res, { once: true });
+    if (Math.abs(video.currentTime - t) < 1e-4 && video.readyState >= 2) return res();
+    const done = () => { clearTimeout(timer); res(); };
+    const timer = setTimeout(() => { video.removeEventListener('seeked', done); res(); }, 1000);
+    video.addEventListener('seeked', done, { once: true });
     video.currentTime = t;
   });
+}
+
+// Bazı videolar (telefon kayıtları, webm) süresini baştan söylemez (Infinity).
+// Videoyu çok ileri sarınca tarayıcı gerçek süreyi öğrenir.
+async function realDuration() {
+  if (Number.isFinite(video.duration)) return video.duration;
+  await seek(1e7);
+  const d = video.duration;
+  await seek(0);
+  return Number.isFinite(d) ? d : video.currentTime;
+}
+
+const MAX_SECONDS = 20; // uzun videolar dakikalarca sürer, şut anı zaten birkaç saniye
+
+// İşlem sırasında tüm kontroller kilitli: kullanıcı işlemin ortasında videoyu başka yere atlatamasın
+function setBusy(b) {
+  state.busy = b;
+  for (const id of ['prev', 'next', 'play', 'scrub', 'markContact', 'file', 'fps']) $(id).disabled = b;
+  $('progress').hidden = !b;
+  $('stageWrap').classList.toggle('busy', b);
 }
 
 // Videoyu kare kare gezip her karenin iskeletini bir kez çıkarır ve saklar.
 // Sonra kaydırıcı sadece saklanan sonuçları çizer, her şey anında olur.
 async function processVideo() {
-  state.busy = true;
+  setBusy(true);
   const lm = await getLandmarker();
   const fps = Number($('fps').value);
-  const total = Math.max(1, Math.floor(video.duration * fps));
+  const dur = await realDuration();
+  const seconds = Math.min(dur, MAX_SECONDS);
+  const total = Math.max(1, Math.floor(seconds * fps));
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   state.frames = [];
   let found = 0;
+  const t0 = performance.now();
   for (let i = 0; i < total; i++) {
-    await seek(Math.min(video.duration - 0.001, i / fps));
+    await seek(Math.min(dur - 0.001, i / fps));
     const r = lm.detectForVideo(video, Math.round((i * 1000) / fps) + 1);
     const people = r.landmarks.map((pose) =>
       pose.map((p) => ({ x: p.x * canvas.width, y: p.y * canvas.height, v: p.visibility ?? 1 })));
     if (people.length) found++;
     state.frames.push(people);
-    if (i % 5 === 0) setStatus(`İskelet çıkarılıyor: ${i + 1} / ${total} kare`);
+    // Canlı geri bildirim: iskelet işlenirken çizilir, ilerleme ve kalan süre gösterilir
+    state.index = i;
+    draw();
+    const pct = Math.round(((i + 1) / total) * 100);
+    const left = Math.round((((performance.now() - t0) / (i + 1)) * (total - i - 1)) / 1000);
+    $('progressBar').style.width = pct + '%';
+    setStatus(`İskelet çıkarılıyor: %${pct} (${i + 1}/${total} kare), kalan ~${left} sn. Bitene kadar butonlar kilitli.`);
   }
   $('scrub').max = total - 1;
-  state.busy = false;
+  setBusy(false);
   const ratio = found / total;
-  setStatus(ratio < 0.6
+  const prefix = dur > MAX_SECONDS ? `Video uzun, ilk ${MAX_SECONDS} sn işlendi. ` : '';
+  setStatus(prefix + (ratio < 0.6
     ? `Dikkat: karelerin sadece %${Math.round(ratio * 100)}'ünde iskelet bulundu. Tüm vücut kadrajda mı?`
-    : `Hazır: ${total} kare, %${Math.round(ratio * 100)}'ünde iskelet bulundu. Temas karesini bul.`);
+    : `Hazır: ${total} kare, %${Math.round(ratio * 100)}'ünde iskelet bulundu. Oynat ya da kaydır, temas karesini bul.`));
   show(0);
 }
 
+// Oynat / durdur: video oynarken iskelet her karede üstüne çizilir
+function togglePlay() {
+  if (state.busy || !state.frames.length) return;
+  if (!video.paused) { video.pause(); return; }
+  if (state.index >= state.frames.length - 1) state.index = 0;
+  video.currentTime = state.index / Number($('fps').value);
+  video.play();
+}
+
+// Oynarken iskeleti videonun o anki karesine eşitler
+function syncToVideo() {
+  if (state.busy || !state.frames.length) return;
+  const i = Math.min(state.frames.length - 1, Math.round(video.currentTime * Number($('fps').value)));
+  state.index = i;
+  $('scrub').value = i;
+  $('frameLabel').textContent = `${i + 1} / ${state.frames.length}`;
+  draw();
+  if (i >= state.frames.length - 1) video.pause();
+}
+function followPlayback() {
+  if (video.paused) return;
+  syncToVideo();
+  requestAnimationFrame(followPlayback);
+}
+video.addEventListener('play', () => { $('play').textContent = '⏸'; requestAnimationFrame(followPlayback); });
+video.addEventListener('pause', () => { $('play').textContent = '⏵'; });
+// Yedek: sekme arka plandayken animasyon durur, 'timeupdate' yine de saniyede birkaç kez gelir
+video.addEventListener('timeupdate', () => { if (!video.paused) syncToVideo(); });
+
 // Bir kareyi göster: videoyu o ana al, iskeleti ve işaretleri çiz
 async function show(i) {
+  if (!video.paused) video.pause();
   state.index = i;
   $('scrub').value = i;
   $('frameLabel').textContent = `${i + 1} / ${state.frames.length}`;
@@ -132,9 +197,11 @@ $('file').addEventListener('change', async (e) => {
     setStatus('Bu video tarayıcıda açılamadı. iPhone kullanıyorsan: Ayarlar → Kamera → Formatlar → "En Uyumlu" seç ve yeniden çek. Ya da videoyu MP4 (H.264) olarak dışa aktar.');
     return;
   }
-  try { await processVideo(); } catch (err) { setStatus('Hata: ' + err.message); state.busy = false; }
+  try { await processVideo(); } catch (err) { setStatus('Hata: ' + err.message); setBusy(false); }
   updateReady();
 });
+
+$('play').addEventListener('click', togglePlay);
 
 $('scrub').addEventListener('input', (e) => show(Number(e.target.value)));
 $('prev').addEventListener('click', () => state.index > 0 && show(state.index - 1));
@@ -144,9 +211,11 @@ document.addEventListener('keydown', (e) => {
   if (state.busy || $('stageWrap').hidden) return;
   if (e.key === 'ArrowLeft') $('prev').click();
   if (e.key === 'ArrowRight') $('next').click();
+  if (e.key === ' ') { e.preventDefault(); togglePlay(); }
 });
 
 $('markContact').addEventListener('click', () => {
+  video.pause();
   state.contact = state.index;
   state.ball = null;
   state.track = null;
@@ -155,9 +224,11 @@ $('markContact').addEventListener('click', () => {
 });
 
 canvas.addEventListener('click', (e) => {
-  if (state.contact === null) { setStatus('Önce temas karesini işaretle.'); return; }
+  if (state.busy) return;
+  if (state.contact === null) { togglePlay(); return; } // temas seçilmeden önce videoya tıklamak oynat/durdur
   if (state.index !== state.contact) show(state.contact);
   const r = canvas.getBoundingClientRect();
+  if (!r.width || !r.height) return; // görünmeyen tuvalde tıklama konumu hesaplanamaz
   state.ball = {
     x: ((e.clientX - r.left) / r.width) * canvas.width,
     y: ((e.clientY - r.top) / r.height) * canvas.height,
@@ -189,8 +260,8 @@ function renderReport(res, mode) {
     ${res.items.map((i) => `
       <div class="metric">
         <span class="name">${i.name} <small>(${i.ref})</small></span>
-        <span class="val">${i.shown} · ${i.score}</span>
-        <div class="bar"><i class="${band(i.score)}" style="width:${i.score}%"></i></div>
+        <span class="val">${i.score === null ? i.shown : `${i.shown} · ${i.score}`}</span>
+        <div class="bar"><i class="${band(i.score ?? 0)}" style="width:${i.score ?? 0}%"></i></div>
         ${i.tip ? `<span class="tip">${i.tip}</span>` : ''}
       </div>`).join('')}
     <p class="hint">Eşikler ilk sürüm, gerçek videolarla ayarlanacak. 2D tek kamera: derinlik ölçülemez.</p>`;

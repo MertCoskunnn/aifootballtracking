@@ -33,6 +33,10 @@ button.primary { background: var(--pitch); color: #04140b; border: none; font-we
 .stage { position: relative; width: 100%; background: #000; border-radius: 10px; overflow: hidden; }
 .stage video { display: block; width: 100%; height: auto; }
 .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+.progress { height: 6px; background: #0f1713; border-radius: 3px; overflow: hidden; margin-top: 10px; }
+.progress i { display: block; height: 100%; width: 0; background: var(--pitch); transition: width .15s; }
+.stage-wrap.busy .stage { outline: 2px solid var(--warn); }
+.stage-wrap.busy .status { color: var(--warn); }
 .status { color: var(--muted); font-size: .9rem; margin: 8px 0; min-height: 1.4em; }
 .controls { display: flex; align-items: center; gap: 8px; }
 .controls input { flex: 1; accent-color: var(--pitch); }

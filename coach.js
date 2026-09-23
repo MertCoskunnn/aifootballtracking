@@ -58,14 +58,18 @@ export function evaluate(m, mode) {
   const rules = RULES[mode];
   const items = rules.map((r) => {
     const v = m[r.key];
+    // Ölçülemeyen değer (nokta görünmüyor vb.) puana katılmaz, "ölçülemedi" diye gösterilir
+    if (!Number.isFinite(v)) return { ...r, value: v, shown: 'ölçülemedi', score: null, tip: null };
     const s = scoreOf(v, r.ideal, r.tol);
     const tip = s >= 80 ? null : v < r.ideal[0] ? r.low : r.high;
     return { ...r, value: v, shown: fmt(v, r.unit), score: s, tip };
   });
+  const scored = items.filter((i) => i.score !== null);
+  if (!scored.length) throw new Error('Hiçbir ölçüm yapılamadı. Temas karesinde oyuncunun tüm vücudu görünüyor mu?');
   const total = Math.round(
-    items.reduce((a, i) => a + i.score * i.weight, 0) / items.reduce((a, i) => a + i.weight, 0)
+    scored.reduce((a, i) => a + i.score * i.weight, 0) / scored.reduce((a, i) => a + i.weight, 0)
   );
-  const worst = [...items].sort((a, b) => a.score * a.weight - b.score * b.weight).filter((i) => i.tip);
+  const worst = [...scored].sort((a, b) => a.score * a.weight - b.score * b.weight).filter((i) => i.tip);
   return { total, items, focus: worst.slice(0, 2), verdict: verdict(total, mode) };
 }
 

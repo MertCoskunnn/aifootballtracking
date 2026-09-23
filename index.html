@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Futbol AI Hoca</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
   <header>
@@ -46,16 +46,18 @@
         <video id="video" playsinline muted></video>
         <canvas id="canvas"></canvas>
       </div>
+      <div class="progress" id="progress" hidden><i id="progressBar"></i></div>
       <div class="status" id="status"></div>
       <div class="controls">
-        <button id="prev" title="Önceki kare">◀</button>
+        <button id="play" title="Oynat / durdur (boşluk tuşu)">⏵</button>
+        <button id="prev" title="Önceki kare (← tuşu)">◀</button>
         <input type="range" id="scrub" min="0" max="0" value="0">
-        <button id="next" title="Sonraki kare">▶</button>
+        <button id="next" title="Sonraki kare (→ tuşu)">▶</button>
         <span id="frameLabel">0 / 0</span>
       </div>
       <ol class="steps">
-        <li>Kaydırıcıyla ayağın topa <b>değdiği kareyi</b> bul → <button id="markContact">Temas karesi bu</button></li>
-        <li>Bu karede <b>topun üstüne tıkla</b> → <span id="ballLabel">top işaretlenmedi</span></li>
+        <li>Oynat/durdur ya da kaydırıcıyla ayağın topa <b>değdiği kareyi</b> bul → <button id="markContact">Temas karesi bu</button></li>
+        <li>Bu karede <b>topun üstüne tıkla</b>. Oyuncu turuncu, diğerleri soluk olur → <span id="ballLabel">top işaretlenmedi</span></li>
         <li><button id="analyze" class="primary" disabled>Hoca, analiz et</button></li>
       </ol>
     </section>
@@ -65,6 +67,6 @@
 
   <footer>Video cihazından çıkmaz. Analiz tarayıcında yapılır. <a href="RESEARCH.md">Kurallar nereden geliyor?</a></footer>
 
-  <script type="module" src="app.js"></script>
+  <script type="module" src="app.js?v=5"></script>
 </body>
 </html>
