@@ -51,4 +51,4 @@ Video kurgusu anlatım odaklı ve sinematik olacak, ekran kaydı ağırlıklı o
 - Her şey ücretsiz. Ücretli servis yok.
 - Kod vault dışında: `Desktop\projeler\futbol-ai-hoca`
 - Onay checkpoint'lerde alınır. Mert bilgisayar başında değilse doğrulanmış işi checkpoint'ler, kararı gerektiren yerde durup not bırakırım.
-- Alt ajan yok. Token tasarruflu çalışılır.
+- ~~Alt ajan yok.~~ **Güncelleme (2026-09-23 gece):** Mert'in kararıyla Frodo planlayıcı ve kontrolcü, Sonnet 5 ajanları uygulayıcı. Ajanlar sırayla çalışır. Tam taslak: [PRODUCT-PLAN.md](PRODUCT-PLAN.md)
