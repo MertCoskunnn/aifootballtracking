@@ -38,7 +38,7 @@ export function analyzeKick(kick, { mode = 'auto', foot = 'auto' } = {}) {
   const ball = { x: kick.rest.x, y: kick.rest.y };
   const track = buildTrack(kick.frames.map((f) => f.people), kick.contact, ball);
   const measurements = effMode === 'freekick'
-    ? measureFreeKick(track, kick.contact, ball, effFoot)
+    ? measureFreeKick(track, kick.contact, ball, effFoot, kick.fps || 30)
     : measure(track, kick.contact, ball, effFoot, kick.fps);
   const result = evaluate(measurements, effMode);
   return { mode: effMode, foot: effFoot, track, measurements, result };

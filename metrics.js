@@ -1,6 +1,7 @@
 // Ölçüm katmanı ("cetvel"): iskelet noktalarından açı ve mesafe hesaplar.
 // Saf fonksiyonlar, tarayıcıya ve MediaPipe'a bağımlı değil, test edilebilir.
 // Koordinatlar piksel cinsinden, y aşağı doğru artar.
+import { findPhases } from './phases.js';
 
 // MediaPipe Pose nokta numaraları
 export const LM = {
@@ -55,8 +56,10 @@ function trunkLean(p, dir) {
 
 // Hareket yönü: sağa +1, sola -1. Kalçanın temastan önceki kaymasına bakar.
 // Kalça yeterince kaymadıysa topun oyuncuya göre konumuna bakar.
-function direction(frames, contact, ball) {
-  const back = Math.max(0, contact - 10);
+// cp-11-evreler: pencere kare sayısı yerine saniyeyle tanımlı (10 kare @ 30fps = 0.33 sn),
+// 60 fps'te de aynı fiziksel süreyi kapsasın diye. 30 fps'te Math.round(10/30*30)=10, değişmez.
+function direction(frames, contact, ball, fps) {
+  const back = Math.max(0, contact - Math.round((10 / 30) * fps));
   const hipNow = mid(frames[contact][LM.hip.left], frames[contact][LM.hip.right]);
   const hipThen = frames[back] ? mid(frames[back][LM.hip.left], frames[back][LM.hip.right]) : hipNow;
   const dx = hipNow.x - hipThen.x;
@@ -123,12 +126,14 @@ export function measure(frames, contact, ball, side, fps = 30) {
   const p = frames[contact];
   if (!p) throw new Error('Temas karesinde iskelet bulunamadı. Başka bir kare seç.');
   const sup = other(side);
-  const dir = direction(frames, contact, ball);
+  const dir = direction(frames, contact, ball, fps);
   const leg = legLength(p, sup);
 
-  // Temastan önceki ve sonraki pencereler (iskeleti olan kareler)
-  const before = sliceFrames(frames, contact - 20, contact);
-  const after = sliceFrames(frames, contact, contact + 15);
+  // Temastan önceki ve sonraki pencereler (iskeleti olan kareler). cp-11-evreler: eskiden sabit
+  // kare sayısıydı (20/15 kare @ 30fps = 0.67/0.5 sn); artık saniyeyle tanımlı, 60 fps'te de aynı
+  // fiziksel süreyi kapsar. 30 fps'te Math.round(20/30*30)=20, Math.round(15/30*30)=15 — değişmez.
+  const before = sliceFrames(frames, contact - Math.round((20 / 30) * fps), contact);
+  const after = sliceFrames(frames, contact, contact + Math.round((15 / 30) * fps));
 
   // Ş7: karşı kolun, temastan önceki ~0.3 sn içindeki en açık hali (30 fps'de bulanıklığa karşı pencere)
   const armWindow = sliceFrames(frames, contact - Math.round(0.3 * fps), contact)
@@ -169,6 +174,26 @@ export function measure(frames, contact, ball, side, fps = 30) {
   const kneeVis = [LM.hip[side], LM.knee[side], LM.ankle[side]];
   const kickKnee = visOk(p, kneeVis) ? kneeFlexion(p, side) : NaN;
 
+  // cp-11-evreler: basış/kurma/takip anlarını gerçek harekete bakarak bulur (phases.js, saf).
+  // Bu evreler PUANA GİRMEZ (coach.js'e dokunulmadı) — bilgi amaçlı, raporda "kurman kısaydı" gibi
+  // somut geri bildirim vermek için.
+  const phases = findPhases(frames, contact, side, fps);
+  const times = phaseTimes(phases, contact, fps);
+
+  // Bilgi amaçlı (puana girmez): basış karesinde destek dizi büküşü (literatür: basışta ~26°,
+  // temasta ~42°, bkz. METRICS.md Ş2/L10). Basış bulunamadıysa ya da destek dizi görünmüyorsa NaN.
+  const supportKneeAtPlant = phases.plant !== null && frames[phases.plant]
+    && visOk(frames[phases.plant], [LM.hip[sup], LM.knee[sup], LM.ankle[sup]])
+    ? kneeFlexion(frames[phases.plant], sup)
+    : NaN;
+  // Bilgi amaçlı: kurma zirvesindeki vuran diz büküşü. `backswing` ile aynı tanım (kneeFlexion),
+  // farklı pencereden geldiği için (plant'a göre vs. sabit 0.67sn) hafif farklı çıkabilir — ikisi
+  // de doğru, hangi anın "kurma zirvesi" sayıldığı farklı (tests/phases.test.mjs bunu doğrular).
+  const backswingAtPeak = phases.backswingPeak !== null && frames[phases.backswingPeak]
+    && visOk(frames[phases.backswingPeak], kneeVis)
+    ? kneeFlexion(frames[phases.backswingPeak], side)
+    : NaN;
+
   return {
     dir,
     // Destek ayağının topa göre ön-arka konumu. + = topun önünde, - = gerisinde
@@ -181,6 +206,23 @@ export function measure(frames, contact, ball, side, fps = 30) {
     followRise,
     followHip,
     fps, // coach.js bazı ölçümleri düşük fps'de puana katmaz (Ş5)
+    phases: { ...phases, times },
+    supportKneeAtPlant,
+    backswingAtPeak,
+  };
+}
+
+// cp-11-evreler: findPhases()'in kare indekslerini temasa göre saniyeye çevirir (temas = 0,
+// öncesi negatif, sonrası pozitif). Kare zamanı (video t) burada bilinmediği için sabit fps
+// varsayılır: (index - contact) / fps. Değişken fps'li videoda bu yaklaşık olur.
+function phaseTimes(phases, contact, fps) {
+  const rel = (i) => (i === null ? null : (i - contact) / fps);
+  return {
+    approachStart: rel(phases.approachStart),
+    plant: rel(phases.plant),
+    backswingPeak: rel(phases.backswingPeak),
+    contact: 0,
+    followEnd: rel(phases.followEnd),
   };
 }
 
@@ -195,16 +237,20 @@ export function measure(frames, contact, ball, side, fps = 30) {
  * hangisi olursa olsun aynı fiziksel anlama gelecek şekilde tasarlandı (bkz. her satırın yorumu).
  *
  * frames/contact/ball: measure() ile aynı biçim. side: vuran ayak 'right' | 'left'.
+ * fps: kare/sn, yaklaşma/takip pencerelerini (F1, F4, F5) saniyeye çevirmek için (varsayılan 30,
+ * geriye uyumlu — cp-11-evreler öncesi çağrılar hâlâ çalışır).
  */
-export function measureFreeKick(frames, contact, ball, side) {
+export function measureFreeKick(frames, contact, ball, side, fps = 30) {
   const p = frames[contact];
   if (!p) throw new Error('Temas karesinde iskelet bulunamadı. Başka bir kare seç.');
   const sup = other(side);
   const mirror = side === 'right' ? 1 : -1;
   const leg = legLength(p, sup);
 
-  const before = sliceFrames(frames, contact - 10, contact); // yaklaşma penceresi (F1, F4)
-  const after = sliceFrames(frames, contact, contact + 15); // takip penceresi (F5)
+  // cp-11-evreler: eskiden sabit kare sayısıydı (10/15 kare @ 30fps = 0.33/0.5 sn), artık
+  // saniyeyle tanımlı. 30 fps'te Math.round(10/30*30)=10, Math.round(15/30*30)=15 — değişmez.
+  const before = sliceFrames(frames, contact - Math.round((10 / 30) * fps), contact); // yaklaşma penceresi (F1, F4)
+  const after = sliceFrames(frames, contact, contact + Math.round((15 / 30) * fps)); // takip penceresi (F5)
 
   // F1 Yaklaşma açısı (proxy): kalça-orta noktasının ~10 kare önceki konumundan temasa kadarki
   // yer değiştirme yönü, görüntü dikeyinden kaç derece saptığı. Düz koşu (kameraya dik) ~0°,
@@ -242,5 +288,29 @@ export function measureFreeKick(frames, contact, ball, side) {
   const crossingRaw = Math.max(...after.map((f) => (mirror * (supAnkleX - f[LM.ankle[side]].x)) / leg));
   const crossing = visOk(p, [LM.ankle[sup]]) ? crossingRaw : NaN;
 
-  return { dir: mirror, approachAngle, supportLateral, trunkLateral, backswing, crossing };
+  // cp-11-evreler: basış/kurma/takip anları burada da bilgi amaçlı hesaplanır (puana girmez,
+  // coach.js'e dokunulmadı). findPhases() kamera açısından bağımsız (sadece hız/açı geometrisi).
+  const phases = findPhases(frames, contact, side, fps);
+  const times = phaseTimes(phases, contact, fps);
+  const supportKneeAtPlant = phases.plant !== null && frames[phases.plant]
+    && visOk(frames[phases.plant], [LM.hip[sup], LM.knee[sup], LM.ankle[sup]])
+    ? kneeFlexion(frames[phases.plant], sup)
+    : NaN;
+  const backswingAtPeak = phases.backswingPeak !== null && frames[phases.backswingPeak]
+    && visOk(frames[phases.backswingPeak], [LM.hip[side], LM.knee[side], LM.ankle[side]])
+    ? kneeFlexion(frames[phases.backswingPeak], side)
+    : NaN;
+
+  return {
+    dir: mirror,
+    approachAngle,
+    supportLateral,
+    trunkLateral,
+    backswing,
+    crossing,
+    fps,
+    phases: { ...phases, times },
+    supportKneeAtPlant,
+    backswingAtPeak,
+  };
 }
