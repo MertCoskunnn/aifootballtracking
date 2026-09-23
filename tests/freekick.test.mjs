@@ -52,7 +52,9 @@ function buildFreeKickSequence(side, good) {
 
   const approachSign = good ? -1 : 1; // -1: mirror yönünde diyagonal yaklaşım (iyi), +1: ters (kötü)
   const supL = good ? 15 : -10; // destek ayağının topa yanal mesafesi (F2), leg=100 varsayımıyla oran = supL/100
-  const trunkDeg = good ? 20 : -20;
+  // cp-08-metrikler: F3 işareti düzeltildi (+ = destek tarafı yatışı, Lees 2010). "İyi" gövde artık
+  // -mirror yönünde (destek tarafına) yatıyor, bu da buildFKPose'un trunk formülüyle negatif trunkDeg demek.
+  const trunkDeg = good ? -20 : 20;
   const kickKneeDeg = good ? 110 : 20; // kurma (F4)
   // Takip (F5): iyide destek ayağını mirror yönünde 60 birim geçer, kötüde ters yöne 40 birim kaçar
   const followOffset = good ? -mirror * 60 : mirror * 40;
@@ -92,6 +94,22 @@ test('measureFreeKick: destek ayak bileği görünmezse supportLateral ve crossi
   assert.ok(Number.isFinite(m.trunkLateral), 'ilgisiz ölçüm etkilenmemeli');
 });
 
+// cp-08-metrikler: F3 işaret düzeltmesi (METRICS.md). Gövde destek (vuruş yapmayan) ayak tarafına
+// yatınca trunkLateral pozitif olmalı, her iki ayak için de ([L10]: profesyoneller destek tarafına 10-16°).
+for (const side of ['right', 'left']) {
+  test(`measureFreeKick: F3 gövde destek tarafına yatınca trunkLateral pozitif olur (${side} ayak)`, () => {
+    const { frames, contact, ball } = buildFreeKickSequence(side, true); // good=true -> trunkDeg negatif -> destek tarafına yatık
+    const m = measureFreeKick(frames, contact, ball, side);
+    assert.ok(m.trunkLateral > 0, `trunkLateral ${m.trunkLateral} pozitif olmalıydı (destek tarafına yatık)`);
+  });
+
+  test(`measureFreeKick: F3 gövde vuruş bacağı tarafına yatınca trunkLateral negatif olur (${side} ayak)`, () => {
+    const { frames, contact, ball } = buildFreeKickSequence(side, false); // good=false -> trunkDeg pozitif -> vuruş bacağı tarafına yatık
+    const m = measureFreeKick(frames, contact, ball, side);
+    assert.ok(m.trunkLateral < 0, `trunkLateral ${m.trunkLateral} negatif olmalıydı (vuruş bacağı tarafına yatık)`);
+  });
+}
+
 for (const side of ['right', 'left']) {
   test(`measureFreeKick: ders kitabı gibi frikik, ${side} ayak — işaretler doğru`, () => {
     const { frames, contact, ball } = buildFreeKickSequence(side, true);
@@ -99,7 +117,7 @@ for (const side of ['right', 'left']) {
     assert.equal(m.dir, side === 'right' ? 1 : -1);
     assert.ok(m.approachAngle > 15, `approachAngle ${m.approachAngle}`); // diyagonal yaklaşım
     assert.ok(m.supportLateral > 0, `supportLateral ${m.supportLateral}`); // beklenen tarafta
-    assert.ok(m.trunkLateral > 0, `trunkLateral ${m.trunkLateral}`); // vuruş bacağı tarafına yatık
+    assert.ok(m.trunkLateral > 0, `trunkLateral ${m.trunkLateral}`); // destek (vuruş yapmayan) tarafa yatık
     assert.ok(m.backswing > 80, `backswing ${m.backswing}`); // belirgin kurma
     assert.ok(m.crossing > 0.3, `crossing ${m.crossing}`); // gövde önünden çapraz takip
   });

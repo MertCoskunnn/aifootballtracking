@@ -9,12 +9,18 @@ const FPS = 30;
 
 // Tek kişilik sahte iskelet. Bacak boyu (kalça->bilek) sabit 100 olsun diye kalçayı ayak
 // bileğinin tam 100px üstüne koyarız (detect.js diz kullanmaz, bu basitleştirme yeterli).
+// cp-08-metrikler: dizler (25/26) ve topuklar (29/30) da eklendi, tam 33 noktalı iskelet için
+// (detect.js bunları kullanmıyor, ama testler tam bir iskelet üretsin diye eklendi).
 function personAt({ rightAnkleX, leftAnkleX, y = 600 }) {
   const p = new Array(33).fill(0).map(() => ({ x: 0, y: 0, v: 1 }));
   p[27] = { x: leftAnkleX, y }; p[31] = { x: leftAnkleX, y }; // sol ayak bileği + ucu (destek)
+  p[29] = { x: leftAnkleX - 5, y };                            // sol topuk
   p[23] = { x: leftAnkleX, y: y - 100 };                       // sol kalça
+  p[25] = { x: leftAnkleX, y: y - 50 };                        // sol diz
   p[28] = { x: rightAnkleX, y }; p[32] = { x: rightAnkleX, y }; // sağ ayak bileği + ucu (vuran)
+  p[30] = { x: rightAnkleX - 5, y };                           // sağ topuk
   p[24] = { x: rightAnkleX, y: y - 100 };                       // sağ kalça
+  p[26] = { x: rightAnkleX, y: y - 50 };                       // sağ diz
   return p;
 }
 
@@ -87,6 +93,91 @@ test('findKicks: vuruş olmadan 2 karelik top tespit boşluğu vuruş yaratmaz',
     const people = [personAt({ rightAnkleX: 200, leftAnkleX: 150, y: ballY })]; // hep uzakta, sabit (hız 0)
     frames.push({ t: i / FPS, people, balls });
   }
+  const kicks = findKicks(frames, FPS);
+  assert.equal(kicks.length, 0, `beklenmedik vuruş bulundu: ${JSON.stringify(kicks)}`);
+});
+
+// (e) cp-08-metrikler: sahada iki duran top var (Messi antrenman videosu gibi). Sadece İKİNCİ top
+// vuruluyor, birincisi (oyuncunun ayaklarından hep uzak, farklı yükseklikte) hiç dokunulmuyor.
+// Tek bir vuruş bulunmalı ve rest ikinci topa (vurulana) ait olmalı.
+function buildTwoStaticBallsSecondKicked() {
+  const contact = 20, total = 28;
+  const ball2X = 1000, ballY = 600, ballW = 20;
+  const decoyBall = { x: 400, y: ballY - 150, w: ballW, s: 0.9 }; // birinci top: uzakta, hiç vurulmuyor
+  const rightStep = (20 * 100) / FPS;
+  const leftStep = (5 * 100) / FPS;
+  const leftTargetX = ball2X - 20;
+  const frames = [];
+  for (let i = 0; i < total; i++) {
+    const rightAnkleX = i <= contact ? ball2X - (contact - i) * rightStep : ball2X;
+    const leftAnkleX = i <= contact ? leftTargetX - (contact - i) * leftStep : leftTargetX;
+    const people = [personAt({ rightAnkleX, leftAnkleX, y: ballY })];
+    const balls = [decoyBall, ...(i <= contact ? [{ x: ball2X, y: ballY, w: ballW, s: 0.9 }] : [])];
+    frames.push({ t: i / FPS, people, balls });
+  }
+  return { frames, contact, ball2X, ballW };
+}
+
+test('findKicks: iki duran top, vuruş İKİNCİ topta olunca tek vuruş bulunur ve rest ikinci topa ait olur', () => {
+  const { frames, contact, ball2X, ballW } = buildTwoStaticBallsSecondKicked();
+  const kicks = findKicks(frames, FPS);
+  assert.equal(kicks.length, 1, `beklenmedik vuruş sayısı: ${JSON.stringify(kicks)}`);
+  assert.equal(kicks[0].contact, contact);
+  assert.equal(kicks[0].foot, 'right');
+  assert.ok(Math.abs(kicks[0].rest.x - ball2X) < ballW, `rest ${JSON.stringify(kicks[0].rest)} ikinci topa yakın değil`);
+});
+
+// (f) cp-08-metrikler: model bazen kalkık (havadaki) bir ayakkabıyı "top" sanıyor (Messi videosu).
+// Bu sahte "top" her karede ayağa yapışık gidiyor (≤ 0.5 çap) ve sonra kayboluyor: vuruş sayılmamalı.
+function buildGluedShoeBall() {
+  const total = 20;
+  const ballW = 20;
+  const footStartX = 700, footEndX = 1300; // hızlı sallanan (kalkık) ayak
+  const raisedY = 500; // groundY'den (700) belirgin yukarıda: havada
+  const frames = [];
+  for (let i = 0; i < total; i++) {
+    const t = i / (total - 1);
+    const rightAnkleX = footStartX + (footEndX - footStartX) * t;
+    const p = personAt({ rightAnkleX, leftAnkleX: 400, y: 700 }); // destek (sol) ayak yerde, sabit
+    p[28] = { x: rightAnkleX, y: raisedY }; p[32] = { x: rightAnkleX, y: raisedY }; // sağ ayak bileği+ucu kalkık
+    p[30] = { x: rightAnkleX - 5, y: raisedY }; // sağ topuk da kalkık
+    const people = [p];
+    const ballX = rightAnkleX + 0.3 * ballW; // ≤ 0.5 çap: ayağa yapışık
+    const balls = i < total - 2 ? [{ x: ballX, y: raisedY, w: ballW, s: 0.9 }] : []; // sonra kayboluyor
+    frames.push({ t: i / FPS, people, balls });
+  }
+  return frames;
+}
+
+test('findKicks: kalkık ayağa yapışık sahte "top" kaybolunca vuruş sayılmaz', () => {
+  const frames = buildGluedShoeBall();
+  const kicks = findKicks(frames, FPS);
+  assert.equal(kicks.length, 0, `beklenmedik vuruş bulundu: ${JSON.stringify(kicks)}`);
+});
+
+// (g) cp-08-metrikler: top, en alttaki ayak bileğinden ~3 çap yukarıda (volé / kafa vuruşu gibi
+// yerden kesik bir temas). detect.js sadece yerden vuruşları hedefliyor, bu vuruş sayılmamalı.
+function buildAirborneBallNoKick() {
+  const contact = 20, total = 28;
+  const ballX = 1000, ballW = 20;
+  const groundY = 600; // ayak bileği hizası
+  const ballY = groundY - 3 * ballW; // en alttaki ayak bileğinden ~3 çap yukarıda
+  const rightStep = (20 * 100) / FPS;
+  const leftStep = (5 * 100) / FPS;
+  const leftTargetX = ballX - 20;
+  const frames = [];
+  for (let i = 0; i < total; i++) {
+    const rightAnkleX = i <= contact ? ballX - (contact - i) * rightStep : ballX;
+    const leftAnkleX = i <= contact ? leftTargetX - (contact - i) * leftStep : leftTargetX;
+    const people = [personAt({ rightAnkleX, leftAnkleX, y: groundY })];
+    const balls = i <= contact ? [{ x: ballX, y: ballY, w: ballW, s: 0.9 }] : [];
+    frames.push({ t: i / FPS, people, balls });
+  }
+  return frames;
+}
+
+test('findKicks: top en alttaki ayak bileğinden ~3 çap yukarıdaysa (volé) vuruş sayılmaz', () => {
+  const frames = buildAirborneBallNoKick();
   const kicks = findKicks(frames, FPS);
   assert.equal(kicks.length, 0, `beklenmedik vuruş bulundu: ${JSON.stringify(kicks)}`);
 });

@@ -22,6 +22,7 @@ function buildPose({
   hipWidth = 20,
   shoulderWidth = 30,
   trunkHeight = 80,
+  heelOffset = 0, // destek topuğunun ayak bileğinden yatay farkı (px), Ş1 testleri için
 }) {
   const sup = side === 'right' ? 'left' : 'right';
   const p = new Array(33).fill(0).map(() => ({ x: 0, y: 0, v: 1 }));
@@ -41,16 +42,19 @@ function buildPose({
 
   // Bacak: uyluk dikey (hip->knee = (0,L1)), baldır knee'den flexDeg kadar sapar.
   // angleAt(hip,knee,ankle) = 180 - flexDeg olacak şekilde (kneeFlexion tanımıyla tutarlı).
-  const leg = (kneeLm, ankleLm, toeLm, hipPoint, flexDeg) => {
+  // Topuk (heel): ayak bileğinin dir yönünün tersine sabit bir ofsetle (gerçekçi, topuk arkada),
+  // + heelOff: Ş1 testlerinin destek topuğunu ayak bileğinden kasıtlı ayırması için.
+  const leg = (kneeLm, ankleLm, toeLm, heelLm, hipPoint, flexDeg, heelOff = 0) => {
     const th = (flexDeg * Math.PI) / 180;
     const knee = { x: hipPoint.x, y: hipPoint.y + L1 };
     const ankle = { x: knee.x + L2 * Math.sin(th), y: knee.y + L2 * Math.cos(th) };
     p[kneeLm] = knee;
     p[ankleLm] = ankle;
     p[toeLm] = { x: ankle.x + dir * 15, y: ankle.y + 5 };
+    p[heelLm] = { x: ankle.x - dir * 10 + heelOff, y: ankle.y + 3 };
   };
-  leg(LM.knee[sup], LM.ankle[sup], LM.toe[sup], p[LM.hip[sup]], supportKnee);
-  leg(LM.knee[side], LM.ankle[side], LM.toe[side], p[LM.hip[side]], kickKnee);
+  leg(LM.knee[sup], LM.ankle[sup], LM.toe[sup], LM.heel[sup], p[LM.hip[sup]], supportKnee, heelOffset);
+  leg(LM.knee[side], LM.ankle[side], LM.toe[side], LM.heel[side], p[LM.hip[side]], kickKnee);
 
   p[LM.wrist[sup]] = { x: p[LM.shoulder[sup]].x + dir * 30, y: p[LM.shoulder[sup]].y + 40 };
   p[LM.wrist[side]] = { x: p[LM.shoulder[side]].x - dir * 30, y: p[LM.shoulder[side]].y + 40 };
@@ -132,20 +136,87 @@ test('buildTrack: oyuncuyu takip eder, hareketsiz izleyiciyi görmezden gelir', 
 
 // cp-07-otomatik: temas karesinde görünürlüğü düşük (v<0.5) noktalara bağlı ölçüm NaN dönmeli,
 // diğer ölçümler etkilenmemeli (metrics.js visOk()).
-test('measure: karşı kol görünmezse armOpen NaN olur, diğer ölçümler etkilenmez', () => {
+// cp-08-metrikler: Ş7 artık temas öncesi ~0.3 sn'lik bir pencerenin en büyüğü; NaN yalnızca
+// pencerenin TAMAMI görünmezse oluşur (tek bir karenin görünmemesi yetmez, diğer kareler kullanılır).
+test('measure: pencerenin tamamında karşı kol görünmezse armOpen NaN olur, diğer ölçümler etkilenmez', () => {
   const inputs = { hipX: 1000, dir: 1, trunk: 10, supportKnee: 35, kickKnee: 20, side: 'right' };
   const frames = buildTrackSequence({ contact: 20, total: 30, ...inputs });
   const contact = 20;
+  const from = contact - Math.round(0.3 * 30);
+  for (let i = from; i <= contact; i++) {
+    frames[i][LM.wrist.left] = { ...frames[i][LM.wrist.left], v: 0.3 }; // karşı kol (destek taraf) bileği hiç net değil
+  }
   const p = frames[contact];
   const ball = { x: p[LM.ankle.left].x, y: p[LM.ankle.left].y };
-  p[LM.wrist.left] = { ...p[LM.wrist.left], v: 0.3 }; // karşı kol (destek taraf) bileği net değil
   const m = measure(frames, contact, ball, 'right');
   assert.ok(Number.isNaN(m.armOpen), `armOpen NaN olmalıydı: ${m.armOpen}`);
   assert.ok(Number.isFinite(m.supportKnee), 'ilgisiz ölçüm etkilenmemeli');
   assert.ok(Number.isFinite(m.trunk), 'ilgisiz ölçüm etkilenmemeli');
 });
 
-test('measure: destek ayak bileği görünmezse supportOffset ve destek dizi NaN olur', () => {
+test('measure: Ş7 armOpen, pencere içindeki tek bir görünmeyen kare NaN yaratmaz (diğer kareler kullanılır)', () => {
+  const inputs = { hipX: 1000, dir: 1, trunk: 10, supportKnee: 35, kickKnee: 20, side: 'right' };
+  const frames = buildTrackSequence({ contact: 20, total: 30, ...inputs });
+  const contact = 20;
+  const p = frames[contact];
+  const ball = { x: p[LM.ankle.left].x, y: p[LM.ankle.left].y };
+  p[LM.wrist.left] = { ...p[LM.wrist.left], v: 0.3 }; // sadece temas karesi net değil, pencerenin geri kalanı net
+  const m = measure(frames, contact, ball, 'right');
+  assert.ok(Number.isFinite(m.armOpen), `armOpen ölçülebilmeliydi: ${m.armOpen}`);
+});
+
+test('measure: Ş7 armOpen, temastan önceki 0.3 sn içindeki pencerenin en büyüğünü alır', () => {
+  const inputs = { hipX: 1000, dir: 1, trunk: 10, supportKnee: 35, kickKnee: 20, side: 'right' };
+  const frames = buildTrackSequence({ contact: 20, total: 30, ...inputs });
+  const contact = 20;
+  const sup = 'left';
+  // Pencere içindeki bir karede kol çok daha açık: bilek gövdeden uzağa taşınır
+  const wideFrame = contact - 3;
+  const hipX = inputs.hipX + inputs.dir * (wideFrame - contact) * 6; // buildTrackSequence'in varsayılan step'i
+  const wide = buildPose({ ...inputs, hipX });
+  wide[LM.wrist[sup]] = { x: wide[LM.shoulder[sup]].x + inputs.dir * 90, y: wide[LM.shoulder[sup]].y + 10 };
+  frames[wideFrame] = wide;
+  const expected = angleAt(wide[LM.wrist[sup]], wide[LM.shoulder[sup]], wide[LM.hip[sup]]);
+  const p = frames[contact];
+  const ball = { x: p[LM.ankle.left].x, y: p[LM.ankle.left].y };
+  const m = measure(frames, contact, ball, 'right', 30);
+  assert.ok(Math.abs(m.armOpen - expected) < 1e-6, `armOpen ${m.armOpen}, beklenen ${expected}`);
+});
+
+// cp-08-metrikler: Ş1 artık destek AYAK BİLEĞİ değil destek TOPUĞU (heel) kullanır.
+test('measure: Ş1 destek ayağı konumu topuktan hesaplanır, ayak bileğinden değil', () => {
+  const inputs = { hipX: 1000, dir: 1, trunk: 10, supportKnee: 35, kickKnee: 20, side: 'right', heelOffset: 40 };
+  const frames = buildTrackSequence({ contact: 20, total: 30, ...inputs });
+  const contact = 20;
+  const p = frames[contact];
+  const ball = { x: p[LM.ankle.left].x, y: p[LM.ankle.left].y }; // top, destek ayak bileğinin hizasında
+  const m = measure(frames, contact, ball, 'right');
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const leg = dist(p[LM.hip.left], p[LM.knee.left]) + dist(p[LM.knee.left], p[LM.ankle.left]);
+  const expectedFromHeel = ((p[LM.heel.left].x - ball.x) * m.dir) / leg;
+  const wouldBeFromAnkle = ((p[LM.ankle.left].x - ball.x) * m.dir) / leg;
+  assert.ok(Math.abs(m.supportOffset - expectedFromHeel) < 1e-6, `supportOffset ${m.supportOffset}, beklenen (topuktan) ${expectedFromHeel}`);
+  assert.notEqual(
+    Math.round(m.supportOffset * 1000),
+    Math.round(wouldBeFromAnkle * 1000),
+    'topuk ve ayak bileği farklı konumda olduğundan sonuç ayak bileğinden hesaplananla aynı olmamalı'
+  );
+});
+
+test('measure: destek topuğu görünmezse supportOffset NaN olur, destek dizi etkilenmez', () => {
+  const inputs = { hipX: 1000, dir: 1, trunk: 10, supportKnee: 35, kickKnee: 20, side: 'right' };
+  const frames = buildTrackSequence({ contact: 20, total: 30, ...inputs });
+  const contact = 20;
+  const p = frames[contact];
+  const ball = { x: p[LM.ankle.left].x, y: p[LM.ankle.left].y };
+  p[LM.heel.left] = { ...p[LM.heel.left], v: 0.1 }; // destek (sol) topuk kadrajda net değil
+  const m = measure(frames, contact, ball, 'right');
+  assert.ok(Number.isNaN(m.supportOffset), `supportOffset NaN olmalıydı: ${m.supportOffset}`);
+  assert.ok(Number.isFinite(m.supportKnee), 'destek dizi ayak bileğine bağlı, etkilenmemeli');
+  assert.ok(Number.isFinite(m.trunk), 'gövde ölçümü etkilenmemeli');
+});
+
+test('measure: destek ayak bileği görünmezse destek dizi NaN olur, supportOffset (topuk) etkilenmez', () => {
   const inputs = { hipX: 1000, dir: 1, trunk: 10, supportKnee: 35, kickKnee: 20, side: 'right' };
   const frames = buildTrackSequence({ contact: 20, total: 30, ...inputs });
   const contact = 20;
@@ -153,9 +224,42 @@ test('measure: destek ayak bileği görünmezse supportOffset ve destek dizi NaN
   const ball = { x: p[LM.ankle.left].x, y: p[LM.ankle.left].y };
   p[LM.ankle.left] = { ...p[LM.ankle.left], v: 0.1 }; // destek ayak (sol) bileği kadrajda net değil
   const m = measure(frames, contact, ball, 'right');
-  assert.ok(Number.isNaN(m.supportOffset), `supportOffset NaN olmalıydı: ${m.supportOffset}`);
   assert.ok(Number.isNaN(m.supportKnee), `supportKnee NaN olmalıydı: ${m.supportKnee}`);
+  assert.ok(Number.isFinite(m.supportOffset), 'Ş1 artık topuktan hesaplanıyor, ayak bileği görünürlüğünden etkilenmemeli');
   assert.ok(Number.isFinite(m.trunk), 'gövde ölçümü etkilenmemeli');
+});
+
+// Ş5: temas karesindeki diz ölçülür. Komşu karelere bakan iki kural denendi, gerçek veride ikisi
+// de yanıldı (128°/54°/7°). Ölçüm gösterilir, puana ise sadece 50+ fps'de girer (coach testi).
+test('measure: Ş5 kickKnee temas karesinde ölçülür, komşu kareler karışmaz', () => {
+  const inputs = { hipX: 1000, dir: 1, trunk: 10, supportKnee: 35, kickKnee: 20, side: 'right' };
+  const frames = buildTrackSequence({ contact: 20, total: 30, ...inputs });
+  const contact = 20;
+  frames[contact - 1] = buildPose({ ...inputs, hipX: inputs.hipX - 6, kickKnee: 128 });
+  const p = frames[contact];
+  const m = measure(frames, contact, { x: p[LM.ankle.left].x, y: p[LM.ankle.left].y }, 'right', 60);
+  assert.ok(Math.abs(m.kickKnee - 20) < 2, `kickKnee ${m.kickKnee} (temas karesinin 20°'si bekleniyordu)`);
+  assert.equal(m.fps, 60);
+});
+
+// cp-08-metrikler: Ş8 yeni ölçüm, takip: temastan sonra vuran kalçanın en büyük fleksiyonu.
+test('measure: Ş8 followHip, temastan sonra uyluk yataya kalkarsa ~90 olur', () => {
+  const inputs = { hipX: 1000, dir: 1, trunk: 0, supportKnee: 35, kickKnee: 20, side: 'right' };
+  const frames = buildTrackSequence({ contact: 20, total: 30, ...inputs });
+  const contact = 20;
+  const raiseFrame = contact + 8; // pencere içinde (contact+15'e kadar)
+  const hipXAt = inputs.hipX + inputs.dir * (raiseFrame - contact) * 6;
+  // hipWidth/shoulderWidth: 0 -> hip.right ve shoulder.right tam orta noktalarda (sol/sağ ofseti
+  // olmadan), böylece trunk=0 ile omuz tam kalçanın üstünde kalır ve açı tam 90° olur.
+  const pose = buildPose({ ...inputs, hipX: hipXAt, hipWidth: 0, shoulderWidth: 0 });
+  const hip = pose[LM.hip.right];
+  // Uyluk yatay: diz, kalçayla aynı yükseklikte (trunk=0 -> omuz tam kalçanın üstünde, açı = 90°)
+  pose[LM.knee.right] = { x: hip.x + inputs.dir * 50, y: hip.y };
+  frames[raiseFrame] = pose;
+  const p = frames[contact];
+  const ball = { x: p[LM.ankle.left].x, y: p[LM.ankle.left].y };
+  const m = measure(frames, contact, ball, 'right', 30);
+  assert.ok(Math.abs(m.followHip - 90) < 2, `followHip ${m.followHip}`);
 });
 
 test('buildTrack: oyuncu bir karede kaybolursa o kare null kalır, takip devam eder', () => {

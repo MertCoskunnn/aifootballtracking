@@ -9,6 +9,7 @@ export const LM = {
   hip: { left: 23, right: 24 },
   knee: { left: 25, right: 26 },
   ankle: { left: 27, right: 28 },
+  heel: { left: 29, right: 30 },
   toe: { left: 31, right: 32 },
 };
 
@@ -34,6 +35,10 @@ export function angleAt(a, b, c) {
 // Diz bükülmesi: düz bacak = 0°, dik açı = 90°
 const kneeFlexion = (p, side) =>
   180 - angleAt(p[LM.hip[side]], p[LM.knee[side]], p[LM.ankle[side]]);
+
+// Kalça fleksiyonu (takip/Ş8): uyluğun gövde eksenine göre öne kalkışı. Düz = 0°, uyluk yatay = 90°
+const hipFlexion = (p, side) =>
+  180 - angleAt(p[LM.shoulder[side]], p[LM.hip[side]], p[LM.knee[side]]);
 
 // Bacak boyu (kalça → diz → ayak bileği), mesafeleri kişiden bağımsız yapmak için
 const legLength = (p, side) =>
@@ -96,8 +101,9 @@ export function buildTrack(frames, contact, ball) {
  * contact: temas karesinin indeksi
  * ball: temas karesinde topun merkezi {x, y}
  * side: vuran ayak 'right' | 'left'
+ * fps: kare/sn, temas civarındaki pencereleri (Ş5, Ş7, Ş8) saniyeye çevirmek için (varsayılan 30)
  */
-export function measure(frames, contact, ball, side) {
+export function measure(frames, contact, ball, side, fps = 30) {
   const p = frames[contact];
   if (!p) throw new Error('Temas karesinde iskelet bulunamadı. Başka bir kare seç.');
   const sup = other(side);
@@ -108,9 +114,12 @@ export function measure(frames, contact, ball, side) {
   const before = sliceFrames(frames, contact - 20, contact);
   const after = sliceFrames(frames, contact, contact + 15);
 
-  // Kolun gövdeyle açısı (karşı kol: vuran ayağın karşısındaki kol, yani destek tarafı)
-  const armOpenRaw = angleAt(p[LM.wrist[sup]], p[LM.shoulder[sup]], p[LM.hip[sup]]);
-  const armOpen = visOk(p, [LM.wrist[sup], LM.shoulder[sup], LM.hip[sup]]) ? armOpenRaw : NaN;
+  // Ş7: karşı kolun, temastan önceki ~0.3 sn içindeki en açık hali (30 fps'de bulanıklığa karşı pencere)
+  const armWindow = sliceFrames(frames, contact - Math.round(0.3 * fps), contact)
+    .filter((f) => visOk(f, [LM.wrist[sup], LM.shoulder[sup]]));
+  const armOpen = armWindow.length
+    ? Math.max(...armWindow.map((f) => angleAt(f[LM.wrist[sup]], f[LM.shoulder[sup]], f[LM.hip[sup]])))
+    : NaN;
 
   // Takip: temastan sonra vuran ayak bileği ne kadar yükseldi (bacak boyuna oranla)
   const ankleY0 = p[LM.ankle[side]].y;
@@ -118,8 +127,15 @@ export function measure(frames, contact, ball, side) {
   const followRiseRaw = (ankleY0 - minY) / leg;
   const followRise = visOk(p, [LM.ankle[side]]) ? followRiseRaw : NaN;
 
-  const supportOffsetRaw = ((p[LM.ankle[sup]].x - ball.x) * dir) / leg;
-  const supportOffset = visOk(p, [LM.ankle[sup]]) ? supportOffsetRaw : NaN;
+  // Ş8: temastan sonraki ~0.5 sn'de vuran kalçanın en büyük öne fleksiyonu (takip)
+  const followHipWindow = sliceFrames(frames, contact, contact + Math.round(0.5 * fps))
+    .filter((f) => visOk(f, [LM.shoulder[side], LM.hip[side], LM.knee[side]]));
+  const followHip = followHipWindow.length ? Math.max(...followHipWindow.map((f) => hipFlexion(f, side))) : NaN;
+
+  // Ş1: destek TOPUĞUNUN (ayak bileği değil) topa göre ön-arka konumu, bacak boyuna oranlı.
+  // + = topun önünde, - = gerisinde (yön kuralı aynı, RESEARCH.md Ş1)
+  const supportOffsetRaw = ((p[LM.heel[sup]].x - ball.x) * dir) / leg;
+  const supportOffset = visOk(p, [LM.heel[sup]]) ? supportOffsetRaw : NaN;
 
   const supportKneeRaw = kneeFlexion(p, sup);
   const supportKnee = visOk(p, [LM.hip[sup], LM.knee[sup], LM.ankle[sup]]) ? supportKneeRaw : NaN;
@@ -130,8 +146,12 @@ export function measure(frames, contact, ball, side) {
   const backswingRaw = Math.max(...before.map((f) => kneeFlexion(f, side)));
   const backswing = visOk(p, [LM.hip[side], LM.knee[side], LM.ankle[side]]) ? backswingRaw : NaN;
 
-  const kickKneeRaw = kneeFlexion(p, side);
-  const kickKnee = visOk(p, [LM.hip[side], LM.knee[side], LM.ankle[side]]) ? kickKneeRaw : NaN;
+  // Ş5: temas karesindeki diz. 30 fps'de diz iki kare arasında ~39° açılıyor. Gerçek veride
+  // art arda üç karede 128° → 54° → 7° görüldü (Mert K1). Hangi kare seçilirse seçilsin sonuç
+  // tesadüfe kalıyor ("öncekinin büyüğü" ve "ayak ucu topa en yakın" kuralları denendi, ikisi de
+  // yanıldı). Bu yüzden ölçülür ve gösterilir, ama puanlamaya sadece fps ≥ 50 ise girer (coach.js).
+  const kneeVis = [LM.hip[side], LM.knee[side], LM.ankle[side]];
+  const kickKnee = visOk(p, kneeVis) ? kneeFlexion(p, side) : NaN;
 
   return {
     dir,
@@ -143,6 +163,8 @@ export function measure(frames, contact, ball, side) {
     kickKnee,
     armOpen,
     followRise,
+    followHip,
+    fps, // coach.js bazı ölçümleri düşük fps'de puana katmaz (Ş5)
   };
 }
 
@@ -184,11 +206,12 @@ export function measureFreeKick(frames, contact, ball, side) {
   const supportLateral = visOk(p, [LM.ankle[sup]]) ? supportLateralRaw : NaN;
 
   // F3 Gövdenin yana yatışı: omuz-orta / kalça-orta hattının dikeyle yatay sapması (derece).
-  // trunkLean() ile aynı üçgen mantığı, ama koşu yönü yerine `mirror` ile işaretlenir.
-  // + = gövde vuruş bacağı tarafına yatık (araştırma notu F3: yön mühendislik tahmini [T])
+  // trunkLean() ile aynı üçgen mantığı, ama koşu yönü yerine `mirror` ile (ters çevrilmiş) işaretlenir.
+  // + = gövde DESTEK (vuruş yapmayan) ayak tarafına yatık. [L10]: profesyoneller temasta vuruş
+  // yapmayan tarafa 10-16° yatıyor. Eski sürümde yön tersti (+ = vuruş bacağı tarafı), düzeltildi.
   const hip = hipOf(p);
   const sh = mid(p[LM.shoulder.left], p[LM.shoulder.right]);
-  const trunkDx = (sh.x - hip.x) * mirror;
+  const trunkDx = (sh.x - hip.x) * -mirror;
   const trunkUp = hip.y - sh.y;
   const trunkLateralRaw = (Math.atan2(trunkDx, trunkUp) * 180) / Math.PI;
   const trunkLateral = visOk(p, [LM.hip.left, LM.hip.right, LM.shoulder.left, LM.shoulder.right]) ? trunkLateralRaw : NaN;

@@ -60,6 +60,20 @@ Okuma: Messi'nin temas dizi iki vuruşta da 32°, yani çok tutarlı. P24'ün 35
 ## Pas (iç taraf, yandan çekim)
 Literatürdeki sayısal veri şuttan çok daha az. [L10] ve pas isabeti çalışmaları: isabet hızla ters orantılı, destek ayağı mesafesi ve gövde açısı isabeti etkiliyor. Eşikler şutunkinden türetildi. Gövde: pas yerden gitmeli, bu yüzden **[-10, 8]°**. Aşırı geriye yaslanma pası kaldırır. Diğerleri RESEARCH.md P1-P5'teki gibi, **[T] tahmin**.
 
+## Son doğrulama (cp-08, 2026-09-23): yeni kurallarla puanlar
+Uygulamanın kendi kodu (vision → detect → metrics → coach) gerçek videolarda çalıştırıldı:
+
+| Vuruş | Toplam | Ş1 destek | Ş3 gövde | Ş4 kurma | Ş5 diz* | Ş7 kol | Ş8 takip | Odak |
+|---|---|---|---|---|---|---|---|---|
+| **Messi MV1** (otomatik) | **100** | görünmüyor | 2° ✓ | 107° ✓ | 32° | 44° ✓ | 104° ✓ | - |
+| **Messi MV2** (elle) | **100** | görünmüyor | −2° ✓ | 113° ✓ | 32° | görünmüyor | 92° ✓ | - |
+| Mert K1 (otomatik) | 82 | −0.64 ✗ | −2° ✓ | 128° ✓ | 54° | 54° ✓ | 89° ✓ | Ş1 |
+| Mert K2 (otomatik) | 88 | −0.55 ~ | 2° ✓ | 107° ✓ | 5° | 81° ✓ | 58° ~ | Ş8, Ş1 |
+
+\* **Ş5 kararı:** 30 fps'de puana katılmıyor. Gerçek veride art arda üç karede vuran diz 128° → 54° → 7° değişti. Komşu karelere bakan iki kural denendi ("öncekinin büyüğü" ve "ayak ucu topa en yakın"), ikisi de yanıldı. Ölçüm raporda "bilgi" olarak gösteriliyor, 50+ fps'de puana giriyor. Messi iki vuruşta da tutarlı olarak 32° veriyor. Bu değer bilgi olarak değerli ama tek karelik zamanlamaya bağlı.
+
+**Okuma:** Kurallar Messi'yi elit sayıyor (100), Mert'te de somut ve literatüre dayalı iki fark buluyor: destek ayağı topun fazla gerisinde ve takip kısa. Eski kurallar Messi'ye 63 vermişti.
+
 ## Açık kalanlar
 - **Gerçek Messi videosu:** Serbest lisanslı ve yakın çekim bir Messi vuruş videosu bulunamadı. Mert kendi indirdiği bir klibi `test-videolar/messi/` klasörüne koyarsa, aynı otomatik akış Messi'nin tam hareketini ölçer ve bu tablodaki "Messi" sütunu dolar.
 - **Ş1 ekseni:** P24'teki x ve y eksenlerinin anlamı asıl çalışmada (Alcock 2012) doğrulanmalı.

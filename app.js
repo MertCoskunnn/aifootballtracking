@@ -3,11 +3,11 @@
 // uygulama vuruşları kendisi bulur (uzun videolarda iki geçişli tarama), bir liste gösterir, kullanıcı
 // bir vuruşa tıklar. Elle işaretleme akışı hâlâ var: hem "vuruş bulunamadı" durumunda hem de
 // otomatik sonucu düzeltmek isteyen kullanıcı için bir yedek yol ("Elle düzelt").
-import { processRange } from './vision.js?v=8';
-import { findKicks, classifyView, suggestMode } from './detect.js?v=8';
-import { candidateWindows } from './scan.js?v=8';
-import { measure, measureFreeKick, buildTrack } from './metrics.js?v=8';
-import { evaluate } from './coach.js?v=8';
+import { processRange } from './vision.js?v=9';
+import { findKicks, classifyView, suggestMode } from './detect.js?v=9';
+import { candidateWindows } from './scan.js?v=9';
+import { measure, measureFreeKick, buildTrack } from './metrics.js?v=9';
+import { evaluate } from './coach.js?v=9';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');
@@ -437,9 +437,11 @@ function runAnalysis() {
   const foot = effectiveFoot();
   try {
     // Frikik arkadan kamerayla ölçülür (measureFreeKick), şut/pas yandan (measure)
+    // measure() temas civarındaki pencereleri (Ş5/Ş7/Ş8) saniyeye çevirmek için fps ister:
+    // burada her zaman yoğun geçişin (DENSE_FPS) karelerini kullanıyoruz.
     const m = mode === 'freekick'
       ? measureFreeKick(state.track, state.contact, state.ball, foot)
-      : measure(state.track, state.contact, state.ball, foot);
+      : measure(state.track, state.contact, state.ball, foot, DENSE_FPS);
     const res = evaluate(m, mode);
     if (state.activeKick) { state.activeKick.score = res.total; renderKickList(); }
     renderReport(res, mode, viewWarning(mode));
@@ -451,6 +453,9 @@ function renderReport(res, mode, warning) {
   const band = (s) => (s >= 80 ? '' : s >= 50 ? 'mid' : 'low');
   const p = state.track[state.contact];
   const lowVis = p && [23, 24, 25, 26, 27, 28].some((i) => p[i].v < 0.5);
+  // Ş5 (temas anındaki diz) ölçüldüyse 60 fps ipucu göster: METRICS.md'deki 30 fps bulanıklığı notu.
+  const s5 = res.items.find((i) => i.ref === 'Ş5');
+  const s5Measured = s5 && s5.score !== null;
   el.innerHTML = `
     <h2>${MODE_TITLE[mode] ?? 'Pas'} raporu</h2>
     <div class="score"><span class="big">${res.total}</span><span>/ 100</span></div>
@@ -464,7 +469,8 @@ function renderReport(res, mode, warning) {
         <div class="bar"><i class="${band(i.score ?? 0)}" style="width:${i.score ?? 0}%"></i></div>
         ${i.tip ? `<span class="tip">${i.tip}</span>` : ''}
       </div>`).join('')}
-    <p class="hint">Eşikler ilk sürüm, gerçek videolarla ayarlanacak. 2D tek kamera: derinlik ölçülemez.</p>`;
+    ${s5Measured ? '<p class="hint">İpucu: temas anı ölçümleri için 60 fps çekim daha doğru sonuç verir.</p>' : ''}
+    <p class="hint">Eşikler: METRICS.md — Lees 2010, Petrolo 2024 (elit oyuncular), Messi ölçümleri. 2D tek kamera: derinlik ölçülemez.</p>`;
   el.hidden = false;
   el.scrollIntoView({ behavior: 'smooth' });
 }

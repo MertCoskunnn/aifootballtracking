@@ -6,13 +6,13 @@ import { evaluate } from '../coach.js';
 
 // RULES.shot ideal aralıklarının tam ortasında: her madde 100 puan almalı.
 const GOOD_SHOT = {
-  supportOffset: -0.1, // ideal [-0.25, 0.05]
-  trunk: 10, // ideal [0, 20]
-  supportKnee: 35, // ideal [20, 50]
-  backswing: 110, // ideal [90, 140]
-  kickKnee: 25, // ideal [5, 45]
-  armOpen: 70, // ideal [40, 110]
-  followRise: 0.6, // ideal [0.35, 1.2]
+  supportOffset: -0.25, // ideal [-0.45, -0.05]
+  trunk: -7.5, // ideal [-18, 3]
+  supportKnee: 30, // ideal [15, 45]
+  backswing: 107.5, // ideal [85, 130]
+  kickKnee: 45, // ideal [30, 60]
+  armOpen: 72.5, // ideal [35, 110]
+  followHip: 95, // ideal [65, 125]
 };
 
 test('coach: iyi şut ~100 alır', () => {
@@ -24,8 +24,8 @@ test('coach: iyi şut ~100 alır', () => {
 test('coach: kötü şut (geriye yaslanmış, destek ayağı önde) düşük alır ve gövdeyi işaret eder', () => {
   const badShot = {
     ...GOOD_SHOT,
-    trunk: -30, // geriye yaslanmış, ideal alt sınırın (0) 30 altında, tol 20 -> puan 0
-    supportOffset: 0.4, // topun çok önünde, ideal üst sınırın (0.05) 0.35 üstünde, tol 0.35 -> puan 0
+    trunk: -45, // geriye yaslanmış, ideal alt sınırın (-18) 27 altında, tol 15 -> puan 0
+    supportOffset: 0.4, // topun çok önünde, ideal üst sınırın (-0.05) çok üstünde, tol 0.30 -> puan 0
   };
   const res = evaluate(badShot, 'shot');
   assert.ok(res.total < 60, `total ${res.total} beklenenden yüksek`);
@@ -48,4 +48,53 @@ test('coach: NaN ölçüm "ölçülemedi" gösterir ve puana katılmaz', () => {
 test('coach: tüm ölçümler NaN ise hata fırlatır', () => {
   const allNaN = Object.fromEntries(Object.keys(GOOD_SHOT).map((k) => [k, NaN]));
   assert.throws(() => evaluate(allNaN, 'shot'));
+});
+
+// cp-08-metrikler: METRICS.md'deki elit-benzeri şut (Lees 2010 / Petrolo 2024 orta noktalarına yakın)
+// ve tek fark gövde açısı olan öne-kapanmış bir varyantı karşılaştırır.
+test('coach: elit-benzeri şut ≥95 alır', () => {
+  const eliteShot = {
+    trunk: -10,
+    supportKnee: 30,
+    backswing: 95,
+    kickKnee: 45,
+    armOpen: 50,
+    followHip: 95,
+    supportOffset: -0.25,
+  };
+  const res = evaluate(eliteShot, 'shot');
+  assert.ok(res.total >= 95, `total ${res.total} beklenenden düşük`);
+});
+
+test('coach: öne kapanan (+12°) aynı şut daha düşük alır ve Ş3 odakta çıkar', () => {
+  const eliteShot = {
+    trunk: -10,
+    supportKnee: 30,
+    backswing: 95,
+    kickKnee: 45,
+    armOpen: 50,
+    followHip: 95,
+    supportOffset: -0.25,
+  };
+  const forwardLeaning = { ...eliteShot, trunk: 12 }; // ideal üst sınırın (3) 9 üstünde, tol 15
+  const eliteRes = evaluate(eliteShot, 'shot');
+  const forwardRes = evaluate(forwardLeaning, 'shot');
+  assert.ok(forwardRes.total < eliteRes.total, `total ${forwardRes.total} elit şuttan düşük olmalıydı (${eliteRes.total})`);
+  assert.ok(
+    forwardRes.focus.some((f) => f.ref === 'Ş3'),
+    'odak listesi gövde kuralını (Ş3) içermiyor'
+  );
+});
+
+// Ş5 (temas anında diz) 30 fps'de güvenilmez: gösterilir ama puana girmez. 60 fps'de puana girer.
+test('coach: Ş5 30 fps\'de puana katılmaz, 60 fps\'de katılır', () => {
+  const base = { supportOffset: -0.25, trunk: -10, supportKnee: 30, backswing: 95, kickKnee: 5, armOpen: 50, followHip: 95 };
+  const at30 = evaluate({ ...base, fps: 30 }, 'shot');
+  const ş5at30 = at30.items.find((i) => i.ref === 'Ş5');
+  assert.equal(ş5at30.score, null);
+  assert.match(ş5at30.shown, /bilgi/);
+  assert.equal(at30.total, 100, 'kötü Ş5 değeri 30 fps\'de toplamı düşürmemeli');
+  const at60 = evaluate({ ...base, fps: 60 }, 'shot');
+  assert.ok(at60.items.find((i) => i.ref === 'Ş5').score < 50);
+  assert.ok(at60.total < 100);
 });
