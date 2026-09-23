@@ -52,6 +52,34 @@ function direction(frames, contact, ball) {
   return Math.sign(ball.x - hipThen.x) || 1;
 }
 
+const hipOf = (p) => mid(p[LM.hip.left], p[LM.hip.right]);
+const d2 = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+
+/**
+ * Oyuncuyu seç ve takip et. Kadrajda birden fazla kişi olabilir.
+ * Temas karesinde ayağı topa en yakın kişi oyuncudur. Sonra ileri ve geri
+ * her karede, bir önceki karedeki kalçasına en yakın kişiyi seçeriz.
+ * frames: her kare için kişi listesi (her kişi 33 nokta). Dönen: kare başına tek iskelet ya da null.
+ */
+export function buildTrack(frames, contact, ball) {
+  const pick = (people, fn) => people.reduce((best, p) => (best === null || fn(p) < fn(best) ? p : best), null);
+  const track = new Array(frames.length).fill(null);
+  const feet = (p) => Math.min(...[27, 28, 31, 32].map((i) => d2(p[i], ball)));
+  const start = pick(frames[contact] || [], feet);
+  if (!start) return track;
+  track[contact] = start;
+  for (const step of [-1, 1]) {
+    let last = start;
+    for (let i = contact + step; i >= 0 && i < frames.length; i += step) {
+      const next = pick(frames[i] || [], (p) => d2(hipOf(p), hipOf(last)));
+      // Kalça bir karede bacak boyundan fazla sıçradıysa bu başka biri, o kareyi boş bırak
+      const leg = legLength(last, 'left');
+      if (next && d2(hipOf(next), hipOf(last)) < leg * leg) { track[i] = next; last = next; }
+    }
+  }
+  return track;
+}
+
 /**
  * frames: her kare için 33 noktalık dizi (piksel) ya da null (iskelet bulunamadı)
  * contact: temas karesinin indeksi

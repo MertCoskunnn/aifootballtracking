@@ -1,6 +1,6 @@
 // Uygulama katmanı: video → iskelet (MediaPipe) → ölçüm → hoca.
 import { PoseLandmarker, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/vision_bundle.mjs';
-import { measure } from './metrics.js';
+import { measure, buildTrack } from './metrics.js';
 import { evaluate } from './coach.js';
 
 const WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm';
@@ -11,7 +11,8 @@ const video = $('video');
 const canvas = $('canvas');
 const ctx = canvas.getContext('2d');
 
-const state = { frames: [], index: 0, contact: null, ball: null, busy: false };
+// frames: her karede bulunan tüm kişiler (en fazla 3). track: seçilen oyuncunun kare kare iskeleti.
+const state = { frames: [], track: null, index: 0, contact: null, ball: null, busy: false };
 let landmarker = null;
 
 async function getLandmarker() {
@@ -21,7 +22,7 @@ async function getLandmarker() {
   landmarker = await PoseLandmarker.createFromOptions(fileset, {
     baseOptions: { modelAssetPath: MODEL, delegate: 'GPU' },
     runningMode: 'VIDEO',
-    numPoses: 1,
+    numPoses: 3, // kadrajda başka biri varsa oyuncuyu kaçırmamak için
   });
   return landmarker;
 }
@@ -49,11 +50,10 @@ async function processVideo() {
   for (let i = 0; i < total; i++) {
     await seek(Math.min(video.duration - 0.001, i / fps));
     const r = lm.detectForVideo(video, Math.round((i * 1000) / fps) + 1);
-    const pts = r.landmarks[0]
-      ? r.landmarks[0].map((p) => ({ x: p.x * canvas.width, y: p.y * canvas.height, v: p.visibility ?? 1 }))
-      : null;
-    if (pts) found++;
-    state.frames.push(pts);
+    const people = r.landmarks.map((pose) =>
+      pose.map((p) => ({ x: p.x * canvas.width, y: p.y * canvas.height, v: p.visibility ?? 1 })));
+    if (people.length) found++;
+    state.frames.push(people);
     if (i % 5 === 0) setStatus(`İskelet çıkarılıyor: ${i + 1} / ${total} kare`);
   }
   $('scrub').max = total - 1;
@@ -77,22 +77,29 @@ async function show(i) {
 const BONES = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24],
   [23, 25], [25, 27], [27, 29], [29, 31], [27, 31], [24, 26], [26, 28], [28, 30], [30, 32], [28, 32]];
 
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const p = state.frames[state.index];
-  const s = canvas.width / 400; // çizgi kalınlığı videonun boyutuna göre
-  if (p) {
-    const kick = $('foot').value === 'right' ? [24, 26, 28, 30, 32] : [23, 25, 27, 29, 31];
-    ctx.lineWidth = 3 * s;
-    for (const [a, b] of BONES) {
-      ctx.strokeStyle = kick.includes(a) && kick.includes(b) ? '#ffb547' : '#3ddc84';
-      ctx.beginPath(); ctx.moveTo(p[a].x, p[a].y); ctx.lineTo(p[b].x, p[b].y); ctx.stroke();
-    }
+function drawPose(p, s, main) {
+  const kick = $('foot').value === 'right' ? [24, 26, 28, 30, 32] : [23, 25, 27, 29, 31];
+  ctx.globalAlpha = main ? 1 : 0.35;
+  ctx.lineWidth = 3 * s;
+  for (const [a, b] of BONES) {
+    ctx.strokeStyle = main && kick.includes(a) && kick.includes(b) ? '#ffb547' : '#3ddc84';
+    ctx.beginPath(); ctx.moveTo(p[a].x, p[a].y); ctx.lineTo(p[b].x, p[b].y); ctx.stroke();
+  }
+  if (main) {
     ctx.fillStyle = '#ffffff';
     for (const i of [11, 12, 23, 24, 25, 26, 27, 28, 31, 32]) {
       ctx.beginPath(); ctx.arc(p[i].x, p[i].y, 3 * s, 0, Math.PI * 2); ctx.fill();
     }
   }
+  ctx.globalAlpha = 1;
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const s = canvas.width / 400; // çizgi kalınlığı videonun boyutuna göre
+  const main = state.track ? state.track[state.index] : null;
+  // Oyuncu seçilmeden önce herkes aynı çizilir. Seçildikten sonra oyuncu parlak, diğerleri soluk.
+  for (const p of state.frames[state.index] || []) drawPose(p, s, state.track ? p === main : true);
   if (state.ball && state.index === state.contact) {
     ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2 * s;
     ctx.beginPath(); ctx.arc(state.ball.x, state.ball.y, 14 * s, 0, Math.PI * 2); ctx.stroke();
@@ -112,11 +119,19 @@ function updateReady() {
 $('file').addEventListener('change', async (e) => {
   const f = e.target.files[0];
   if (!f) return;
-  Object.assign(state, { contact: null, ball: null });
+  Object.assign(state, { contact: null, ball: null, track: null });
   $('report').hidden = true;
   $('stageWrap').hidden = false;
   video.src = URL.createObjectURL(f);
-  await new Promise((r) => video.addEventListener('loadeddata', r, { once: true }));
+  // Tarayıcı videoyu çözemezse (örn. iPhone'un HEVC formatı) 'error' gelir, yoksa uygulama sessizce donardı
+  const ok = await new Promise((r) => {
+    video.addEventListener('loadeddata', () => r(true), { once: true });
+    video.addEventListener('error', () => r(false), { once: true });
+  });
+  if (!ok) {
+    setStatus('Bu video tarayıcıda açılamadı. iPhone kullanıyorsan: Ayarlar → Kamera → Formatlar → "En Uyumlu" seç ve yeniden çek. Ya da videoyu MP4 (H.264) olarak dışa aktar.');
+    return;
+  }
   try { await processVideo(); } catch (err) { setStatus('Hata: ' + err.message); state.busy = false; }
   updateReady();
 });
@@ -134,6 +149,7 @@ document.addEventListener('keydown', (e) => {
 $('markContact').addEventListener('click', () => {
   state.contact = state.index;
   state.ball = null;
+  state.track = null;
   setStatus(`Temas karesi: ${state.index + 1}. Şimdi topun üstüne tıkla.`);
   draw(); updateReady();
 });
@@ -146,13 +162,16 @@ canvas.addEventListener('click', (e) => {
     x: ((e.clientX - r.left) / r.width) * canvas.width,
     y: ((e.clientY - r.top) / r.height) * canvas.height,
   };
+  state.track = buildTrack(state.frames, state.contact, state.ball);
+  if (!state.track[state.contact]) setStatus('Temas karesinde kimse bulunamadı. Başka bir kare seç.');
+  else setStatus('Oyuncu seçildi: topa en yakın kişi. Başka biri seçildiyse topa tekrar tıkla.');
   draw(); updateReady();
 });
 
 $('analyze').addEventListener('click', () => {
   const mode = $('mode').value;
   try {
-    const m = measure(state.frames, state.contact, state.ball, $('foot').value);
+    const m = measure(state.track, state.contact, state.ball, $('foot').value);
     renderReport(evaluate(m, mode), mode);
   } catch (err) { setStatus(err.message); }
 });
@@ -160,7 +179,7 @@ $('analyze').addEventListener('click', () => {
 function renderReport(res, mode) {
   const el = $('report');
   const band = (s) => (s >= 80 ? '' : s >= 50 ? 'mid' : 'low');
-  const p = state.frames[state.contact];
+  const p = state.track[state.contact];
   const lowVis = p && [23, 24, 25, 26, 27, 28].some((i) => p[i].v < 0.5);
   el.innerHTML = `
     <h2>${mode === 'shot' ? 'Şut' : 'Pas'} raporu</h2>

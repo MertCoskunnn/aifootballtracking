@@ -1,0 +1,7 @@
+# Kişisel test videoları git'e asla gitmez (yüz ve vücut görüntüsü = özel veri)
+test-videolar/
+*.mp4
+*.mov
+*.MOV
+*.webm
+*.avi
