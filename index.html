@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Futbol AI Hoca</title>
-  <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
   <header>
@@ -23,6 +23,7 @@
           <select id="mode">
             <option value="shot">Şut (ayak üstü)</option>
             <option value="pass">Pas (iç taraf)</option>
+            <option value="freekick">Frikik / falsolu</option>
           </select>
         </label>
         <label>Vuran ayak
@@ -38,7 +39,7 @@
           </select>
         </label>
       </div>
-      <p class="hint">Çekim: tam yandan, telefon sabit, tüm vücut ve top kadrajda.</p>
+      <p class="hint" id="setupHint">Çekim: tam yandan, telefon sabit, tüm vücut ve top kadrajda.</p>
     </section>
 
     <section class="panel stage-wrap" id="stageWrap" hidden>
@@ -67,6 +68,6 @@
 
   <footer>Video cihazından çıkmaz. Analiz tarayıcında yapılır. <a href="RESEARCH.md">Kurallar nereden geliyor?</a></footer>
 
-  <script type="module" src="app.js?v=5"></script>
+  <script type="module" src="app.js?v=6"></script>
 </body>
 </html>

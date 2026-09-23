@@ -43,6 +43,24 @@ const RULES = {
       low: 'Destek dizin kilitli. Hafif bük, denge artar.',
       high: 'Destek dizin çok bükülmüş.' },
   ],
+  // Frikik / falsolu vuruş: arkadan kamera, ölçümler measureFreeKick()'ten gelir (RESEARCH.md F1..F5)
+  freekick: [
+    { key: 'supportLateral', ref: 'F2', name: 'Destek ayağının topa yanal mesafesi', unit: 'bacak', ideal: [0.05, 0.25], tol: 0.25, weight: 3,
+      low: 'Destek ayağın topa çok yakın ya da yanlış tarafta duruyor, vuruş bacağının salınım alanı daralıyor. Ayağını topun yanına, biraz dışına bas.',
+      high: 'Destek ayağın topun çok uzağında, denge ve isabet kaybediyorsun. Ayağını topa biraz yaklaştır.' },
+    { key: 'crossing', ref: 'F5', name: 'Takibin çaprazlaması', unit: 'bacak', ideal: [0.3, 1.0], tol: 0.4, weight: 3,
+      low: 'Vuruştan sonra bacağın gövdenin önünden karşı tarafa geçmiyor, sarma takip eksik. Topa vurduktan sonra ayağın karşı omzuna doğru devam etsin.',
+      high: 'Takip çok fazla çaprazlıyor, kontrolü kaybedebilirsin. Sarmayı biraz kıs.' },
+    { key: 'trunkLateral', ref: 'F3', name: 'Gövdenin yana yatışı', unit: '°', ideal: [10, 30], tol: 25, weight: 2,
+      low: 'Gövden dik, yana yatış yok. Vuruş anında gövdeni hafifçe yana yatır, bacağın serbest kalsın.',
+      high: 'Gövden çok yana yatmış, denge ve temas noktası kayabilir. Yatışı azalt.' },
+    { key: 'backswing', ref: 'F4', name: 'Kurma (geri salınım)', unit: '°', ideal: [90, 140], tol: 40, weight: 2,
+      low: 'Bacağını yeterince kurmuyorsun. Topuğun kalçana doğru gelsin, dönüş ve spin oradan doğar.',
+      high: 'Kurma çok abartılı, zamanlama ve denge bozulabilir.' },
+    { key: 'approachAngle', ref: 'F1', name: 'Yaklaşma açısı', unit: '°', ideal: [20, 45], tol: 30, weight: 2,
+      low: 'Kameraya çok dik (düz) koşuyorsun. Topa hafif çapraz bir çizgiyle yaklaş, ayağın topun altına/yanına daha rahat girer.',
+      high: 'Yaklaşma çok açılı, denge ve zamanlama bozulabilir. Açıyı biraz kapat.' },
+  ],
 };
 
 // Aralığın içindeyse 100, dışındaysa uzaklığa göre doğrusal düşüş
@@ -74,7 +92,7 @@ export function evaluate(m, mode) {
 }
 
 function verdict(t, mode) {
-  const what = mode === 'shot' ? 'şut' : 'pas';
+  const what = mode === 'shot' ? 'şut' : mode === 'freekick' ? 'frikik' : 'pas';
   if (t >= 85) return `Temiz bir ${what}. Tekniğin oturmuş, şimdi tekrar sayısı.`;
   if (t >= 65) return `İyi ${what}, ama birkaç detay seni geri tutuyor. Aşağıdaki iki şeye odaklan.`;
   if (t >= 45) return `Temel var, teknik dağınık. Önce en düşük puanlı maddeyi düzelt.`;

@@ -46,13 +46,63 @@
 
 ---
 
-## 3. Kamera kuralları (2D'nin sınırı)
+## 3. Frikik / Falsolu Vuruş
+
+> Frikik (curl/curve kick), şuttan farklı bir teknik: amaç ham hız değil, topa **spin** vermek. Spin, topun
+> merkezine göre **dışmerkezli (off-centre) temas** ve ayağın topu "sarma" hareketinden gelir. Bu yüzden
+> yandan çekimde ölçülen kurallar (Ş1–Ş8) burada geçerli değil — yandan bakınca destek ayağının topa **yanal**
+> mesafesi, gövdenin yana yatışı ve yaklaşmanın açısı görünmez. Bu bölüm **arkadan** çekime göre kuruldu.
+
+### Teknik: instep/inside curl 5 evre
+1. **Yaklaşma:** Şuttaki gibi köşeli (diyagonal) bir koşu çizgisi, ama frikikte bu açı hem hız hem de ayağın
+   topun **yanına ve altına** girebilmesi için gerekli. Düz çizgi yaklaşım, ayağı topun merkezine kilitler ve
+   spin azalır. **[L]** (Isokawa & Lees 1988; Lees ve ark. 2010 incelemesinde; pelvis/lumbal sıralama: Sigward
+   ve ark., ScienceDirect S0021929023004918)
+2. **Destek ayağı basışı:** Topun **yanına**, hafif geriye ve dışa basar (şuttaki gibi tam yanına değil) —
+   böylece vuruş bacağı topun dış/iç kenarına dönerek gelebilir. Destek ayağı topa çok yakın ya da çok uzak
+   olursa denge ve isabet bozulur. **[K]** (Bessenouci ve ark. 2019/2020, DOI 10.1080/10255842.2020.1714936, bkz. Kaynaklar:
+   destek ayağı top merkezinden ~10 cm'den fazla uzaklaştığında denge ve isabet olumsuz etkileniyor)
+3. **Gövde:** Gövde vuruş anında **yana** yatar, bu yatış vuruş bacağının serbestçe yana açılıp topun
+   dışından/içinden dönmesini sağlar. Kaynak yana yatışın önemini doğruluyor ama tam yönü (hangi bacağa doğru)
+   belirtmiyor — burada verilen yön (vuruş bacağı tarafına) bizim mühendislik tahminimiz **[T]**, yana yatışın
+   önemli olduğu bulgusu **[K]** (aynı kaynak: "lateral lean with leg inclination... key strategy for
+   optimizing ball contact point")
+4. **Kurma ve dönüş:** Vuruş bacağının dizi büküldükçe kalça ve gövde karşı yöne döner (kamçı etkisi burada da
+   var, ama düzlemi daha diyagonal). **[L]** (Lees ve ark. 2010)
+5. **Temas ve takip:** Ayak topun merkezine değil, **kenarına** değer (sağ ayaklı inside curl: topun sağ
+   alt/orta kenarı). Vuruş sonrası ayak **gövdenin önünden karşı tarafa** doğru "sarar" — bu çapraz takip
+   spinin göstergesidir. **[L]** (Asai ve ark. 2002, "The curve kick of a football I: impact with the foot";
+   coaching kaynakları: wrap-around/across-body follow-through tutarlı şekilde tekrarlanıyor, ama laboratuvar
+   eşiği yok)
+
+### Ölçülecek şeyler (arkadan ya da çapraz arkadan çekim, 2D)
+| # | Ölçüm | Doğru teknik | Neden önemli | Güven |
+|---|---|---|---|---|
+| F1 | **Yaklaşma açısı (proxy)** | Temastan önceki ~10 karede kalça-orta noktasının izlediği yön, görüntü dikeyinden ~20–45° sapmalı (diyagonal koşu). Dümdüz (0°'a yakın) yaklaşım | Diyagonal yaklaşım pelvis rotasyonunu ve ayağın topun altına/yanına girmesini sağlar, düz koşu ayağı merkeze kilitler | [L] genel bulgu, eşik [T] (arkadan kamera açısı proxy'si bizim tasarımımız, laboratuvar ölçümüyle birebir değil) |
+| F2 | **Destek ayağının topa yanal mesafesi** | Topun biraz yanında ve hafif dışında, bacak boyuna oranla küçük bir pozitif değer (destek-dışı yönde). Ayak tam topun altında (0'a çok yakın) ya da çok uzakta değil | Çok yakın ayak vuruş bacağının salınım alanını keser, çok uzak ayak dengeyi ve isabeti bozar | [K] mesafe etkisi (Tandfonline 2020), sayısal eşik [T] |
+| F3 | **Gövdenin yana yatışı** | Vuruş anında gövde vuruş bacağı tarafına hafifçe yatık (10–30°) | Kaynak yana yatışın topa temas noktasını optimize etmede kilit strateji olduğunu doğruluyor, ama hangi yöne ve kaç derece net yazmıyor | [K] yana yatış önemli (Tandfonline 2020), **yön ve sayısal aralık [T]** — bizim mühendislik tahminimiz |
+| F4 | **Kurma (geri salınımda diz bükülmesi)** | Belirgin büküş, şuttekine yakın (~90°+). Az büküş = zayıf dönüş ve zayıf spin | Kamçı etkisinin menzili, şuttekiyle aynı prensip | [L] eşik [T] (Ş4 ile aynı kaynak ve aynı sebep) |
+| F5 | **Takibin çaprazlaması** | Temastan sonra vuruş ayağı bileği, destek ayağın karşı tarafına (gövdenin önünden çapraz) geçer; bacak boyuna oranlı belirgin bir pozitif çaprazlama | Çapraz "sarma" takip, topa dışmerkezli temasın ve spin üretiminin dışarıdan görülebilir işareti | [L] coaching konsensüsü + off-centre impact literatürü (Asai 2002), sayısal eşik [T] |
+
+**Kamera notu:** Frikik ölçümleri **arkadan ya da çapraz arkadan** çekim gerektirir (oyuncu kameradan uzaklaşır ya
+da kameraya yaklaşır). Telefon sabit, oyuncu ve top koşu boyunca kadrajda kalmalı; yandan çekimde F2 ve F3 hiç
+ölçülemez (derinlik kaybolur), bu yüzden frikik modu şut/pas modlarından ayrı bir kamera varsayımıyla çalışıyor.
+
+**Dürüstlük notu:** F1, F2, F3 ve F5'in sayısal eşikleri bu ilk sürümde **tahmindir [T]** — literatür yönü
+(daha fazla/daha az, hangi taraf) doğruluyor ama santimetre veya derece cinsinden kesin bir eşik hiçbir
+kaynakta arkadan-kamera 2D ölçümü için verilmiyor (çoğu çalışma 3D hareket yakalama ve üstten/yandan kamera
+kullanıyor). Eşikler Mert'in gerçek frikik videolarıyla kalibre edilecek (bkz. PRODUCT-PLAN.md cp-10).
+
+---
+
+## 4. Kamera kuralları (2D'nin sınırı)
 - **Şut:** Tam yandan, vuruş bacağı kameraya bakan taraf. Telefon sabit, kalça yüksekliğinde, 3–5 m uzakta. Tüm vücut ve top kadrajda.
 - **Pas:** Yandan (gövde ve takip için) ve arkadan veya önden (ayak dönüklüğü için).
+- **Frikik:** Arkadan ya da çapraz arkadan (bkz. bölüm 3). Yandan çekim frikik için kullanılamaz.
 - **FPS:** Vuruş anı çok kısa. 60 fps varsa kullan, 30 fps'te temas anı kaçabilir.
 - **Tek kamera derinlik ölçemez.** Destek ayağının topa **yanal** mesafesini yandan göremeyiz. Sadece ön-arka mesafe ölçülür.
 
-## 4. Ölçüleri normalize etmek
+## 5. Ölçüleri normalize etmek
 Pikselle ölçmek kişiye ve kameraya göre değişir. Mesafeleri **bacak boyuna** (kalça → ayak bileği) bölerek oransal hale getiriyoruz. Böylece 1.60 m ve 1.90 m boyundaki oyuncu aynı kuralla puanlanır.
 
 ---
@@ -69,3 +119,11 @@ Pikselle ölçmek kişiye ve kameraya göre değişir. Mesafeleri **bacak boyuna
 - İç taraf vuruşunda kütle merkezi: [PMC](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4234770/)
 - Side-foot vuruşunda destek bacağı: [PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC9344159/)
 - MediaPipe Pose Landmarker (Web): [Google AI Edge](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker/web_js), paket `@mediapipe/tasks-vision@1.0.1` (npm'den doğrulandı)
+
+### Frikik / falso (bölüm 3) kaynakları
+- Asai, T., Carré, M. J., Akatsuka, T., Haake, S. J. (2002). The curve kick of a football I: impact with the foot. *Sports Engineering, 5(4), 183–192.* [Wiley](https://onlinelibrary.wiley.com/doi/abs/10.1046/j.1460-2687.2002.00108.x) · [PDF mirror](http://www.vision.ime.usp.br/~jb/research/soccer_simulation/curve_kick_I.pdf)
+- Bray, K., Kerwin, D. (2003). Modelling the flight of a soccer ball in a direct free kick. *Journal of Sports Sciences, 21(2), 75–85.* [PDF](https://people.stfx.ca/smackenz/courses/hk474/labs/jump%20float%20lab/bray%202002%20modelling%20the%20flight%20of%20a%20soccer%20ball%20in%20a%20direct%20free%20kick.pdf)
+- Bessenouci ve ark. (2019/2020). Analysis of some biomechanical variables influencing the accuracy of direct free kicks in soccer. *Computer Methods in Biomechanics and Biomedical Engineering, 22(sup1), S340–S342.* [Tandfonline](https://www.tandfonline.com/doi/full/10.1080/10255842.2020.1714936) · [ResearchGate](https://www.researchgate.net/publication/341579839_Analysis_of_some_biomechanical_variables_influencing_the_accuracy_of_direct_free_kicks_in_soccer) (tam yazar listesi web araması özetinden geldi, doğrudan makaleden teyit edilmedi — isim yazımı kontrol edilmeli)
+- Kimachi, K., Koido, M., Hong, S., Shimonagata, S., Nakayama, M., Asai, T. (2024). Features of ball impact in straight, curve and knuckle kicks in soccer. [SAGE Journals](https://journals.sagepub.com/doi/abs/10.1177/17543371221101234)
+- Characteristics of ball impact on curve shot in soccer. [ScienceDirect (açık erişim PDF)](https://www.sciencedirect.com/science/article/pii/S187770581301059X/pdf)
+- Not: Wrap-around/across-body takip için gördüğümüz kaynaklar çoğunlukla koçluk siteleri (laboratuvar ölçümü yok) — bu yüzden F5'in eşiği [T] olarak işaretlendi, yönü ise Asai (2002) dışmerkezli temas bulgusuyla tutarlı.

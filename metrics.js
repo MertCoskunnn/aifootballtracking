@@ -55,6 +55,10 @@ function direction(frames, contact, ball) {
 const hipOf = (p) => mid(p[LM.hip.left], p[LM.hip.right]);
 const d2 = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
 
+// contact çevresindeki kareleri (iskeleti olanları) dilimler. measure() ve measureFreeKick() ortak kullanır.
+const sliceFrames = (frames, from, to) =>
+  frames.slice(Math.max(0, from), Math.min(frames.length, to + 1)).filter(Boolean);
+
 /**
  * Oyuncuyu seç ve takip et. Kadrajda birden fazla kişi olabilir.
  * Temas karesinde ayağı topa en yakın kişi oyuncudur. Sonra ileri ve geri
@@ -94,10 +98,8 @@ export function measure(frames, contact, ball, side) {
   const leg = legLength(p, sup);
 
   // Temastan önceki ve sonraki pencereler (iskeleti olan kareler)
-  const window = (from, to) =>
-    frames.slice(Math.max(0, from), Math.min(frames.length, to + 1)).filter(Boolean);
-  const before = window(contact - 20, contact);
-  const after = window(contact, contact + 15);
+  const before = sliceFrames(frames, contact - 20, contact);
+  const after = sliceFrames(frames, contact, contact + 15);
 
   // Kolun gövdeyle açısı (karşı kol: vuran ayağın karşısındaki kol, yani destek tarafı)
   const armOpen = angleAt(p[LM.wrist[sup]], p[LM.shoulder[sup]], p[LM.hip[sup]]);
@@ -118,4 +120,59 @@ export function measure(frames, contact, ball, side) {
     armOpen,
     followRise,
   };
+}
+
+/**
+ * Frikik / falsolu vuruş ölçümü. RESEARCH.md bölüm 3, kurallar F1..F5.
+ *
+ * Kamera arkadan ya da çapraz arkadan varsayılır (oyuncu kameradan uzaklaşır/yaklaşır).
+ * Bu açıda görüntünün x ekseni oyuncunun kendi sağ-sol ekseniyle örtüşür: yandan çekimdeki
+ * gibi bir aynalanma YOK (arkadan bakınca sağ-sol, oyuncunun kendi sağ-solu ile aynı taraftadır).
+ * Bu yüzden yön normalizasyonu `direction()` ile değil, doğrudan `side` parametresinden gelen
+ * `mirror` ile yapılır: sağ ayaklı için +1, sol ayaklı için -1. Her ölçümün "+" işareti, ayak
+ * hangisi olursa olsun aynı fiziksel anlama gelecek şekilde tasarlandı (bkz. her satırın yorumu).
+ *
+ * frames/contact/ball: measure() ile aynı biçim. side: vuran ayak 'right' | 'left'.
+ */
+export function measureFreeKick(frames, contact, ball, side) {
+  const p = frames[contact];
+  if (!p) throw new Error('Temas karesinde iskelet bulunamadı. Başka bir kare seç.');
+  const sup = other(side);
+  const mirror = side === 'right' ? 1 : -1;
+  const leg = legLength(p, sup);
+
+  const before = sliceFrames(frames, contact - 10, contact); // yaklaşma penceresi (F1, F4)
+  const after = sliceFrames(frames, contact, contact + 15); // takip penceresi (F5)
+
+  // F1 Yaklaşma açısı (proxy): kalça-orta noktasının ~10 kare önceki konumundan temasa kadarki
+  // yer değiştirme yönü, görüntü dikeyinden kaç derece saptığı. Düz koşu (kameraya dik) ~0°,
+  // diyagonal yaklaşım daha büyük |açı|. + = vuruş bacağı tarafından gelen diyagonal yaklaşım.
+  const hipNow = hipOf(p);
+  const hipThen = hipOf(before[0] || p);
+  const approachDx = (hipNow.x - hipThen.x) * mirror;
+  const approachDy = Math.abs(hipNow.y - hipThen.y) || 1; // 0'a bölmeyi önler
+  const approachAngle = (Math.atan2(approachDx, approachDy) * 180) / Math.PI;
+
+  // F2 Destek ayağının topa yanal mesafesi (bacak boyuna oranlı). Yandan çekimde ölçülemeyen bu
+  // mesafe arkadan görünür. + = destek ayak, vuruş bacağının tersi (beklenen) tarafta ve topa göre dışta
+  const supportLateral = ((ball.x - p[LM.ankle[sup]].x) * mirror) / leg;
+
+  // F3 Gövdenin yana yatışı: omuz-orta / kalça-orta hattının dikeyle yatay sapması (derece).
+  // trunkLean() ile aynı üçgen mantığı, ama koşu yönü yerine `mirror` ile işaretlenir.
+  // + = gövde vuruş bacağı tarafına yatık (araştırma notu F3: yön mühendislik tahmini [T])
+  const hip = hipOf(p);
+  const sh = mid(p[LM.shoulder.left], p[LM.shoulder.right]);
+  const trunkDx = (sh.x - hip.x) * mirror;
+  const trunkUp = hip.y - sh.y;
+  const trunkLateral = (Math.atan2(trunkDx, trunkUp) * 180) / Math.PI;
+
+  // F4 Kurma: geri salınımda vuruş bacağının diz bükülme zirvesi (Ş4 ile aynı tanım)
+  const backswing = Math.max(...before.map((f) => kneeFlexion(f, side)));
+
+  // F5 Takibin çaprazlaması: temastan sonra vuruş ayak bileği, temas anındaki destek ayak
+  // bileğini bacak boyuna oranla ne kadar geçti. + = beklenen yönde çapraz geçiş (sarma takip)
+  const supAnkleX = p[LM.ankle[sup]].x;
+  const crossing = Math.max(...after.map((f) => (mirror * (supAnkleX - f[LM.ankle[side]].x)) / leg));
+
+  return { dir: mirror, approachAngle, supportLateral, trunkLateral, backswing, crossing };
 }

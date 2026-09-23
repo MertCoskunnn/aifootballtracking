@@ -1,7 +1,7 @@
 // Uygulama katmanı: video → iskelet (MediaPipe) → ölçüm → hoca.
 import { PoseLandmarker, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/vision_bundle.mjs';
-import { measure, buildTrack } from './metrics.js?v=5';
-import { evaluate } from './coach.js?v=5';
+import { measure, measureFreeKick, buildTrack } from './metrics.js?v=6';
+import { evaluate } from './coach.js?v=6';
 
 const WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm';
 const MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task';
@@ -207,6 +207,14 @@ $('scrub').addEventListener('input', (e) => show(Number(e.target.value)));
 $('prev').addEventListener('click', () => state.index > 0 && show(state.index - 1));
 $('next').addEventListener('click', () => state.index < state.frames.length - 1 && show(state.index + 1));
 $('foot').addEventListener('change', draw);
+
+// Kamera kurulumu moda göre değişir: şut/pas yandan, frikik arkadan (RESEARCH.md bölüm 3-4)
+const SETUP_HINTS = {
+  shot: 'Çekim: tam yandan, telefon sabit, tüm vücut ve top kadrajda.',
+  pass: 'Çekim: tam yandan, telefon sabit, tüm vücut ve top kadrajda.',
+  freekick: 'Çekim: arkadan ya da çapraz arkadan, telefon sabit, oyuncu ve top kadrajda.',
+};
+$('mode').addEventListener('change', () => { $('setupHint').textContent = SETUP_HINTS[$('mode').value]; });
 document.addEventListener('keydown', (e) => {
   if (state.busy || $('stageWrap').hidden) return;
   if (e.key === 'ArrowLeft') $('prev').click();
@@ -242,10 +250,15 @@ canvas.addEventListener('click', (e) => {
 $('analyze').addEventListener('click', () => {
   const mode = $('mode').value;
   try {
-    const m = measure(state.track, state.contact, state.ball, $('foot').value);
+    // Frikik arkadan kamerayla ölçülür (measureFreeKick), şut/pas yandan (measure)
+    const m = mode === 'freekick'
+      ? measureFreeKick(state.track, state.contact, state.ball, $('foot').value)
+      : measure(state.track, state.contact, state.ball, $('foot').value);
     renderReport(evaluate(m, mode), mode);
   } catch (err) { setStatus(err.message); }
 });
+
+const MODE_TITLE = { shot: 'Şut', pass: 'Pas', freekick: 'Frikik' };
 
 function renderReport(res, mode) {
   const el = $('report');
@@ -253,7 +266,7 @@ function renderReport(res, mode) {
   const p = state.track[state.contact];
   const lowVis = p && [23, 24, 25, 26, 27, 28].some((i) => p[i].v < 0.5);
   el.innerHTML = `
-    <h2>${mode === 'shot' ? 'Şut' : 'Pas'} raporu</h2>
+    <h2>${MODE_TITLE[mode] ?? 'Pas'} raporu</h2>
     <div class="score"><span class="big">${res.total}</span><span>/ 100</span></div>
     <div class="coach">${res.verdict}${res.focus.length ? '<br><br><b>Odaklan:</b> ' + res.focus.map((f) => f.tip).join(' ') : ''}</div>
     ${lowVis ? '<p class="warn">Temas karesinde bacak noktalarının bazıları net görünmüyor. Sonuç yanıltıcı olabilir.</p>' : ''}
