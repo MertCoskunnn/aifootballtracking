@@ -130,6 +130,34 @@ test('buildTrack: oyuncuyu takip eder, hareketsiz izleyiciyi görmezden gelir', 
   }
 });
 
+// cp-07-otomatik: temas karesinde görünürlüğü düşük (v<0.5) noktalara bağlı ölçüm NaN dönmeli,
+// diğer ölçümler etkilenmemeli (metrics.js visOk()).
+test('measure: karşı kol görünmezse armOpen NaN olur, diğer ölçümler etkilenmez', () => {
+  const inputs = { hipX: 1000, dir: 1, trunk: 10, supportKnee: 35, kickKnee: 20, side: 'right' };
+  const frames = buildTrackSequence({ contact: 20, total: 30, ...inputs });
+  const contact = 20;
+  const p = frames[contact];
+  const ball = { x: p[LM.ankle.left].x, y: p[LM.ankle.left].y };
+  p[LM.wrist.left] = { ...p[LM.wrist.left], v: 0.3 }; // karşı kol (destek taraf) bileği net değil
+  const m = measure(frames, contact, ball, 'right');
+  assert.ok(Number.isNaN(m.armOpen), `armOpen NaN olmalıydı: ${m.armOpen}`);
+  assert.ok(Number.isFinite(m.supportKnee), 'ilgisiz ölçüm etkilenmemeli');
+  assert.ok(Number.isFinite(m.trunk), 'ilgisiz ölçüm etkilenmemeli');
+});
+
+test('measure: destek ayak bileği görünmezse supportOffset ve destek dizi NaN olur', () => {
+  const inputs = { hipX: 1000, dir: 1, trunk: 10, supportKnee: 35, kickKnee: 20, side: 'right' };
+  const frames = buildTrackSequence({ contact: 20, total: 30, ...inputs });
+  const contact = 20;
+  const p = frames[contact];
+  const ball = { x: p[LM.ankle.left].x, y: p[LM.ankle.left].y };
+  p[LM.ankle.left] = { ...p[LM.ankle.left], v: 0.1 }; // destek ayak (sol) bileği kadrajda net değil
+  const m = measure(frames, contact, ball, 'right');
+  assert.ok(Number.isNaN(m.supportOffset), `supportOffset NaN olmalıydı: ${m.supportOffset}`);
+  assert.ok(Number.isNaN(m.supportKnee), `supportKnee NaN olmalıydı: ${m.supportKnee}`);
+  assert.ok(Number.isFinite(m.trunk), 'gövde ölçümü etkilenmemeli');
+});
+
 test('buildTrack: oyuncu bir karede kaybolursa o kare null kalır, takip devam eder', () => {
   const total = 15;
   const contact = 7;

@@ -53,27 +53,89 @@ const footDist = (p, side, pt) => Math.min(...FEET[side].map((i) => dist(p[i], p
  *   rest: temas anındaki top konumu {x,y,w} (ölçümlerde "top" olarak kullanılır)
  */
 export function findKicks(frames, fps, opts = {}) {
+  // Kadrajda birden çok top olabilir (Messi'nin antrenman videosu: yerde 2 top, vurulan
+  // ikincisi). Tek bir top izi yanlış topa kilitlenir. Her top ayrı izlenir, vuruş hepsinde aranır.
+  const speed = footSpeeds(frames, fps);
+  const all = [];
+  for (const track of trackBalls(frames)) all.push(...kicksOnTrack(frames, fps, track, speed, opts));
+  // Aynı vuruş iki izde görünebilir: zamanca yakın olanlardan ayağı topa en yakın olanı tut
+  all.sort((a, b) => a.contact - b.contact || a.d - b.d);
+  const gap = Math.round((opts.minGap ?? 0.8) * fps);
+  const out = [];
+  for (const k of all) {
+    const prev = out[out.length - 1];
+    if (prev && k.contact - prev.contact < gap) { if (k.d < prev.d) out[out.length - 1] = k; continue; }
+    out.push(k);
+  }
+  return out.map(({ d, ...k }) => k);
+}
+
+/**
+ * Birden çok top izi: her karedeki tespitler, en yakın mevcut ize bağlanır
+ * (son 10 kare içinde görülmüş ve 3 çaptan yakın). Bağlanamayan güvenli tespit yeni iz açar.
+ * Dönen: iz listesi, her iz kare başına {x,y,w,s} ya da null.
+ */
+export function trackBalls(frames, minScore = 0.3) {
+  const tracks = []; // { pts: [], last, lastI }
+  frames.forEach((f, i) => {
+    const used = new Set();
+    const dets = (f.balls || []).filter((b) => b.w > 0);
+    for (const t of tracks) {
+      if (i - t.lastI > 10) continue;
+      let best = -1, bd = Infinity;
+      dets.forEach((b, k) => { const d = dist(b, t.last); if (!used.has(k) && d < bd && d < 3 * Math.max(t.last.w, b.w)) { bd = d; best = k; } });
+      if (best >= 0) { used.add(best); t.pts[i] = dets[best]; t.last = dets[best]; t.lastI = i; }
+    }
+    dets.forEach((b, k) => {
+      if (used.has(k) || b.s < minScore) return;
+      const pts = new Array(frames.length).fill(null); pts[i] = b;
+      tracks.push({ pts, last: b, lastI: i });
+    });
+  });
+  return tracks.map((t) => Array.from({ length: frames.length }, (_, i) => t.pts[i] || null));
+}
+
+function kicksOnTrack(frames, fps, rawTrack, speed, opts) {
   // minFootSpeed 8: destek ayağı topun yanına inerken bile ~5 bacak boyu/sn hızla gelir,
   // vuran ayak ise 12-25. Eşik ikisinin arasında olmalı ki destek ayağı "vuran" sanılmasın.
   const { nearFoot = 1.6, minFootSpeed = 8, minGap = 0.8 } = opts;
-  const ball = fillGaps(trackBall(frames), Math.round(0.2 * fps));
-  const speed = footSpeeds(frames, fps); // [kare][kişi] → {left, right} bacak boyu / sn
+  const ball = fillGaps(rawTrack, Math.round(0.2 * fps));
   const kicks = [];
   let i = 1;
   while (i < frames.length - 1) {
     const b = ball[i] || ball[i - 1];
     if (!b) { i++; continue; }
+    // Hayalet iz eleme: tek karelik bir tespit (ör. ayakkabı "top" sanıldı) kaybolunca vuruş
+    // sanılmasın. Gerçek top temastan önceki ~0.3 sn'de en az 3 kez görülmüş olmalı.
+    const seen = rawTrack.slice(Math.max(0, i - Math.round(0.3 * fps)), i + 1).filter(Boolean).length;
+    if (seen < 3) { i++; continue; }
     // 1) Topa yakın ve hızlı bir ayak var mı?
     let hit = null;
     (frames[i].people || []).forEach((p, person) => {
       for (const side of ['left', 'right']) {
         const d = footDist(p, side, b) / b.w;
+        // Not: "son 0.2 sn'deki en yüksek hız" denendi (bulanık Messi vuruşu için), ama destek
+        // ayağını da vuran ayak saydırıp Mert'in şutunu bozdu. Geri alındı. Anlık hız kullanılıyor.
         const v = speed[i]?.[person]?.[side] ?? 0;
         // Topa yakın ayaklardan en hızlısı: yavaş olan destek ayağıdır
         if (d <= nearFoot && v >= minFootSpeed && (!hit || v > hit.v)) hit = { frame: i, person, side, d, v };
       }
     });
     if (!hit) { i++; continue; }
+    // Yerden vuruş şartı: topun alt kenarı oyuncunun en alttaki ayak bileği hizasında olmalı
+    // (± 1.5 çap). Messi videosunda top dizde sektirilirken "vuruş" sanıldı. Modlarımız
+    // (şut, pas, frikik) yerden vuruş. Voleler bilerek dışarıda, onlar ayrı bir teknik.
+    const hp = frames[i].people[hit.person];
+    const groundY = Math.max(hp[27].y, hp[28].y);
+    if (Math.abs(b.y + b.w / 2 - groundY) > 1.5 * b.w) { i++; continue; }
+    // Ayakkabı eleme: model bazen havadaki ayakkabıyı "top" sanıyor (Messi videosu). O "top"
+    // hep ayağa yapışık gider. Gerçek top temastan önce en az 2 karede ayaktan ≥1 çap uzaktadır.
+    let apart = 0;
+    for (let k = Math.max(0, i - Math.round(0.3 * fps)); k < i; k++) {
+      const q = frames[k].people?.[hit.person], rb = rawTrack[k];
+      if (q && rb && footDist(q, 'left', rb) > rb.w && footDist(q, 'right', rb) > rb.w) apart++;
+    }
+    if (apart < 2) { i++; continue; }
     // 2) Top sonrasında hızlanıyor ya da kayboluyor mu?
     const onset = ballLeaves(ball, i, b);
     if (onset < 0) { i++; continue; }
@@ -87,7 +149,7 @@ export function findKicks(frames, fps, opts = {}) {
       if (d < best.d) best = { ...hit, frame: k, d };
     }
     const foot = kickingFoot(frames, best.frame, best.person, b, fps);
-    kicks.push({ contact: best.frame, foot, person: best.person, rest: { x: b.x, y: b.y, w: b.w }, onset, flight: flightOf(ball, onset, b) });
+    kicks.push({ contact: best.frame, foot, person: best.person, rest: { x: b.x, y: b.y, w: b.w }, onset, flight: flightOf(ball, onset, b), d: best.d });
     i = onset + Math.round(minGap * fps); // aynı vuruşu iki kez sayma
   }
   return kicks;
@@ -114,16 +176,26 @@ export function fillGaps(ball, maxGap) {
 
 // Her karede her kişinin iki ayağının hızı (bacak boyu / saniye). Bacak boyuna bölmek,
 // kameraya yakın ya da uzak oyuncuyu aynı ölçekte değerlendirmemizi sağlar.
+// Video 25 fps iken 30 fps okunursa bazı kareler birebir tekrar eder (Messi videosu).
+// Tekrar eden karede hız 0 çıkar, ardından iki katı. Tekrar eden karede bir önceki hız korunur.
 function footSpeeds(frames, fps) {
-  return frames.map((f, i) => (f.people || []).map((p) => {
-    const prev = frames[i - 1]?.people?.reduce((a, q) => (dist(q[23], p[23]) < dist(a[23], p[23]) ? q : a), frames[i - 1].people[0]);
-    if (!prev) return { left: 0, right: 0 };
-    const leg = (dist(p[23], p[27]) + dist(p[24], p[28])) / 2 || 1;
-    return {
-      left: (dist(p[27], prev[27]) / leg) * fps,
-      right: (dist(p[28], prev[28]) / leg) * fps,
-    };
-  }));
+  const out = [];
+  frames.forEach((f, i) => {
+    out[i] = (f.people || []).map((p, k) => {
+      const prevPeople = frames[i - 1]?.people;
+      if (!prevPeople?.length) return { left: 0, right: 0 };
+      const prev = prevPeople.reduce((a, q) => (dist(q[23], p[23]) < dist(a[23], p[23]) ? q : a));
+      if (dist(p[23], prev[23]) < 1e-6 && dist(p[27], prev[27]) < 1e-6 && dist(p[28], prev[28]) < 1e-6) {
+        return out[i - 1]?.[k] || { left: 0, right: 0 }; // aynı kare tekrar etti
+      }
+      const leg = (dist(p[23], p[27]) + dist(p[24], p[28])) / 2 || 1;
+      return {
+        left: (dist(p[27], prev[27]) / leg) * fps,
+        right: (dist(p[28], prev[28]) / leg) * fps,
+      };
+    });
+  });
+  return out;
 }
 
 // Top i'den sonraki birkaç karede ayrılıyor mu? Ayrıldığı ilk kareyi döner, yoksa -1.
@@ -181,10 +253,17 @@ function flightOf(ball, onset, rest) {
  */
 export function classifyView(frames, kick, fps) {
   const shot = describeFlight(kick.flight);
-  const n = Math.max(3, Math.round(0.7 * fps));
-  const a = frames[kick.contact - n]?.people?.[kick.person], b = frames[kick.contact]?.people?.[kick.person];
+  // Temastan ~0.7 sn öncesine bak. Kısa bir pencere işlendiyse eldeki en eski kareyi kullan (en az 0.25 sn)
+  const from = Math.max(0, kick.contact - Math.round(0.7 * fps));
+  const b = frames[kick.contact]?.people?.[kick.person];
+  const a = kick.contact - from >= Math.round(0.25 * fps) && b
+    ? frames[from]?.people?.reduce((x, q) => (dist(q[23], b[23]) < dist(x[23], b[23]) ? q : x), frames[from].people[0])
+    : null;
   if (a && b) {
-    const leg = (p) => (dist(p[23], p[27]) + dist(p[24], p[28])) / 2;
+    // Bacak boyu = kalça→diz + diz→bilek (büküşten etkilenmez), iki bacağın büyüğü.
+    // Kalçadan bileğe düz mesafe kullanılınca kurulan bacak "kısaldı", oyuncu uzaklaşıyor sanıldı.
+    const seg = (p, h, k, an) => dist(p[h], p[k]) + dist(p[k], p[an]);
+    const leg = (p) => Math.max(seg(p, 23, 25, 27), seg(p, 24, 26, 28));
     const hip = (p) => ({ x: (p[23].x + p[24].x) / 2, y: (p[23].y + p[24].y) / 2 });
     const across = Math.abs(hip(b).x - hip(a).x) / Math.max(leg(a), leg(b));
     const grow = leg(b) / leg(a);

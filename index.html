@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Futbol AI Hoca</title>
-  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
   <header>
@@ -21,6 +21,7 @@
       <div class="row">
         <label>Hareket
           <select id="mode">
+            <option value="auto">Otomatik</option>
             <option value="shot">Şut (ayak üstü)</option>
             <option value="pass">Pas (iç taraf)</option>
             <option value="freekick">Frikik / falsolu</option>
@@ -28,18 +29,13 @@
         </label>
         <label>Vuran ayak
           <select id="foot">
+            <option value="auto">Otomatik</option>
             <option value="right">Sağ</option>
             <option value="left">Sol</option>
           </select>
         </label>
-        <label>Kare hızı (fps)
-          <select id="fps">
-            <option value="30">30</option>
-            <option value="60">60</option>
-          </select>
-        </label>
       </div>
-      <p class="hint" id="setupHint">Çekim: tam yandan, telefon sabit, tüm vücut ve top kadrajda.</p>
+      <p class="hint" id="setupHint">Videoyu yükle, hoca vuruşu ve kamera açısını kendisi bulsun.</p>
     </section>
 
     <section class="panel stage-wrap" id="stageWrap" hidden>
@@ -49,6 +45,8 @@
       </div>
       <div class="progress" id="progress" hidden><i id="progressBar"></i></div>
       <div class="status" id="status"></div>
+      <button id="stopBtn" class="stop" hidden>Durdur</button>
+      <p class="hint warn" id="noKick" hidden>Vuruş bulunamadı. Elle işaretleyebilirsin.</p>
       <div class="controls">
         <button id="play" title="Oynat / durdur (boşluk tuşu)">⏵</button>
         <button id="prev" title="Önceki kare (← tuşu)">◀</button>
@@ -57,10 +55,16 @@
         <span id="frameLabel">0 / 0</span>
       </div>
       <ol class="steps">
-        <li>Oynat/durdur ya da kaydırıcıyla ayağın topa <b>değdiği kareyi</b> bul → <button id="markContact">Temas karesi bu</button></li>
+        <li>Oynat/durdur ya da kaydırıcıyla ayağın topa <b>değdiği kareyi</b> bul → <button id="markContact">Elle düzelt: temas karesi bu</button></li>
         <li>Bu karede <b>topun üstüne tıkla</b>. Oyuncu turuncu, diğerleri soluk olur → <span id="ballLabel">top işaretlenmedi</span></li>
         <li><button id="analyze" class="primary" disabled>Hoca, analiz et</button></li>
       </ol>
+    </section>
+
+    <section class="panel" id="kickList" hidden>
+      <h2>Bulunan vuruşlar (<span id="kickCount">0</span>)</h2>
+      <div id="kickRows"></div>
+      <p class="hint">Bir satıra tıkla, o vuruşu incele.</p>
     </section>
 
     <section class="panel" id="report" hidden></section>
@@ -68,6 +72,6 @@
 
   <footer>Video cihazından çıkmaz. Analiz tarayıcında yapılır. <a href="RESEARCH.md">Kurallar nereden geliyor?</a></footer>
 
-  <script type="module" src="app.js?v=6"></script>
+  <script type="module" src="app.js?v=8"></script>
 </body>
 </html>

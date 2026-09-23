@@ -10,7 +10,8 @@
 2. **Messi (referans kontrol).** Wikimedia Commons'taki serbest lisanslı fotoğraflardan, MediaPipe Pose (heavy) ile ölçüldü:
    - **M1** "Lionel Messi vs Valladolid 3.jpg" (CC BY-SA 4.0): yandan, sol ayak, **temastan hemen önce** (bacak kurulu, destek ayağı basmış).
    - **M0** "Lionel Messi of FC Barcelona, April 11, 2009.jpg" (CC BY 2.0): arkadan, sol ayak, **kurma anı**.
-   - Serbest lisanslı Messi **videosu** arandı. Bulunanlar tribünden çekilmiş (oyuncular ~40 px) ya da çizgi film. Kinematik ölçüme uygun değil. Messi verisi bu yüzden 2 kareyle sınırlı. Fotoğraflar temas anının kendisini göstermiyor, sadece yakınını.
+   - Serbest lisanslı Messi videosu Wikimedia'da bulunamadı (tribün çekimi ya da çizgi film).
+   - **MV1, MV2: Mert'in eklediği video**, "Lionel Messi Amazing Freekick Goal in Training _ HD.mp4" (`test-videolar/`, git'e gitmez). 720p, 25 fps, yandan sabit kamera, antrenmanda iki frikik, sol ayak. MV1 (6.10 sn) otomatik bulundu. MV2 (14.33 sn) hareket bulanıklığı yüzünden otomatik bulunamadı, temas karesi elle işaretlendi. Destek bacağı kameradan uzak tarafta kaldığı için görünmüyor (görünürlük < 0.5), destek ölçümleri "ölçülemedi".
 3. **Mert'in saha videoları (gerçekçilik kontrolü).** `test-videolar/`, git'e gitmez. Otomatik tespitle bulunan iki şut:
    - **K1** (68 sn'lik video, 1.90 sn) ve **K2** (5 dk'lık video, 144.60 sn). İkisi de sağ ayak, yandan, 30 fps.
 
@@ -20,6 +21,17 @@
 - Bu ölçümlerin ağırlığı düşük tutulur ve kullanıcıya **60 fps** önerilir.
 
 ---
+
+## Ham ölçümler: Messi videosu ve Mert (2026-09-23, eski ölçüm tanımlarıyla)
+| Ölçüm | MV1 | MV2 | Mert K1 | Mert K2 |
+|---|---|---|---|---|
+| Kurma (diz büküşü, max) | 107° | 113° | 128° | 107° |
+| Temas anında vuran diz | 32° | 32° | 54° | 5° (bir kare geç) |
+| Gövde öne eğimi | +2° | −2° | −2° | +2° |
+| Takip: ayak bileği yükselişi (bacak boyu) | 0.61 | 0.53 | 0.25 | 0.12 |
+| Destek dizi / destek konumu | görünmüyor | görünmüyor | görünmüyor / −0.62 | 13° / −0.57 |
+
+Okuma: Messi'nin temas dizi iki vuruşta da 32°, yani çok tutarlı. P24'ün 35–55° aralığının hemen altında, frikikte (yerleştirme vuruşu) beklenebilir. En büyük fark takipte: Messi'nin ayağı Mert'inkinden 2–4 kat yükseğe devam ediyor.
 
 ## Şut (ayak üstü, yandan çekim)
 

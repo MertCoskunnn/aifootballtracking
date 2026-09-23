@@ -81,6 +81,17 @@ function buildFreeKickSequence(side, good) {
   return { frames, contact, ball };
 }
 
+// cp-07-otomatik: temas karesinde görünürlüğü düşük noktaya bağlı ölçüm NaN dönmeli (metrics.js visOk()).
+test('measureFreeKick: destek ayak bileği görünmezse supportLateral ve crossing NaN olur', () => {
+  const { frames, contact, ball } = buildFreeKickSequence('right', true);
+  const p = frames[contact];
+  p[LM.ankle.left] = { ...p[LM.ankle.left], v: 0.2 }; // side='right' -> sup='left'
+  const m = measureFreeKick(frames, contact, ball, 'right');
+  assert.ok(Number.isNaN(m.supportLateral), `supportLateral NaN olmalıydı: ${m.supportLateral}`);
+  assert.ok(Number.isNaN(m.crossing), `crossing NaN olmalıydı: ${m.crossing}`);
+  assert.ok(Number.isFinite(m.trunkLateral), 'ilgisiz ölçüm etkilenmemeli');
+});
+
 for (const side of ['right', 'left']) {
   test(`measureFreeKick: ders kitabı gibi frikik, ${side} ayak — işaretler doğru`, () => {
     const { frames, contact, ball } = buildFreeKickSequence(side, true);

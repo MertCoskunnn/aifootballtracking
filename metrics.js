@@ -16,6 +16,13 @@ const other = (side) => (side === 'right' ? 'left' : 'right');
 const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
+// cp-07-otomatik: gerçek videoda kamera açısına göre bir uzuv gizlenebilir (yandan çekimde
+// uzak kol gibi). MediaPipe böyle noktalarda düşük 'visibility' verir ama yine de bir x,y üretir
+// (uydurma), bu da örn. armOpen=5° gibi anlamsız sayılara yol açar. Temas karesinde görünürlüğü
+// düşük noktalara bağlı ölçümü hesaplamak yerine NaN döneriz; coach.js bunu "ölçülemedi" gösterir.
+const VIS_MIN = 0.5;
+const visOk = (p, idxs) => idxs.every((i) => (p[i].v ?? 1) >= VIS_MIN);
+
 // b noktasındaki iç açı (derece): a-b-c
 export function angleAt(a, b, c) {
   const v1 = { x: a.x - b.x, y: a.y - b.y };
@@ -102,21 +109,38 @@ export function measure(frames, contact, ball, side) {
   const after = sliceFrames(frames, contact, contact + 15);
 
   // Kolun gövdeyle açısı (karşı kol: vuran ayağın karşısındaki kol, yani destek tarafı)
-  const armOpen = angleAt(p[LM.wrist[sup]], p[LM.shoulder[sup]], p[LM.hip[sup]]);
+  const armOpenRaw = angleAt(p[LM.wrist[sup]], p[LM.shoulder[sup]], p[LM.hip[sup]]);
+  const armOpen = visOk(p, [LM.wrist[sup], LM.shoulder[sup], LM.hip[sup]]) ? armOpenRaw : NaN;
 
   // Takip: temastan sonra vuran ayak bileği ne kadar yükseldi (bacak boyuna oranla)
   const ankleY0 = p[LM.ankle[side]].y;
   const minY = Math.min(...after.map((f) => f[LM.ankle[side]].y));
-  const followRise = (ankleY0 - minY) / leg;
+  const followRiseRaw = (ankleY0 - minY) / leg;
+  const followRise = visOk(p, [LM.ankle[side]]) ? followRiseRaw : NaN;
+
+  const supportOffsetRaw = ((p[LM.ankle[sup]].x - ball.x) * dir) / leg;
+  const supportOffset = visOk(p, [LM.ankle[sup]]) ? supportOffsetRaw : NaN;
+
+  const supportKneeRaw = kneeFlexion(p, sup);
+  const supportKnee = visOk(p, [LM.hip[sup], LM.knee[sup], LM.ankle[sup]]) ? supportKneeRaw : NaN;
+
+  const trunkRaw = trunkLean(p, dir);
+  const trunk = visOk(p, [LM.hip.left, LM.hip.right, LM.shoulder.left, LM.shoulder.right]) ? trunkRaw : NaN;
+
+  const backswingRaw = Math.max(...before.map((f) => kneeFlexion(f, side)));
+  const backswing = visOk(p, [LM.hip[side], LM.knee[side], LM.ankle[side]]) ? backswingRaw : NaN;
+
+  const kickKneeRaw = kneeFlexion(p, side);
+  const kickKnee = visOk(p, [LM.hip[side], LM.knee[side], LM.ankle[side]]) ? kickKneeRaw : NaN;
 
   return {
     dir,
     // Destek ayağının topa göre ön-arka konumu. + = topun önünde, - = gerisinde
-    supportOffset: ((p[LM.ankle[sup]].x - ball.x) * dir) / leg,
-    supportKnee: kneeFlexion(p, sup),
-    trunk: trunkLean(p, dir),
-    backswing: Math.max(...before.map((f) => kneeFlexion(f, side))),
-    kickKnee: kneeFlexion(p, side),
+    supportOffset,
+    supportKnee,
+    trunk,
+    backswing,
+    kickKnee,
     armOpen,
     followRise,
   };
@@ -151,11 +175,13 @@ export function measureFreeKick(frames, contact, ball, side) {
   const hipThen = hipOf(before[0] || p);
   const approachDx = (hipNow.x - hipThen.x) * mirror;
   const approachDy = Math.abs(hipNow.y - hipThen.y) || 1; // 0'a bölmeyi önler
-  const approachAngle = (Math.atan2(approachDx, approachDy) * 180) / Math.PI;
+  const approachAngleRaw = (Math.atan2(approachDx, approachDy) * 180) / Math.PI;
+  const approachAngle = visOk(p, [LM.hip.left, LM.hip.right]) ? approachAngleRaw : NaN;
 
   // F2 Destek ayağının topa yanal mesafesi (bacak boyuna oranlı). Yandan çekimde ölçülemeyen bu
   // mesafe arkadan görünür. + = destek ayak, vuruş bacağının tersi (beklenen) tarafta ve topa göre dışta
-  const supportLateral = ((ball.x - p[LM.ankle[sup]].x) * mirror) / leg;
+  const supportLateralRaw = ((ball.x - p[LM.ankle[sup]].x) * mirror) / leg;
+  const supportLateral = visOk(p, [LM.ankle[sup]]) ? supportLateralRaw : NaN;
 
   // F3 Gövdenin yana yatışı: omuz-orta / kalça-orta hattının dikeyle yatay sapması (derece).
   // trunkLean() ile aynı üçgen mantığı, ama koşu yönü yerine `mirror` ile işaretlenir.
@@ -164,15 +190,18 @@ export function measureFreeKick(frames, contact, ball, side) {
   const sh = mid(p[LM.shoulder.left], p[LM.shoulder.right]);
   const trunkDx = (sh.x - hip.x) * mirror;
   const trunkUp = hip.y - sh.y;
-  const trunkLateral = (Math.atan2(trunkDx, trunkUp) * 180) / Math.PI;
+  const trunkLateralRaw = (Math.atan2(trunkDx, trunkUp) * 180) / Math.PI;
+  const trunkLateral = visOk(p, [LM.hip.left, LM.hip.right, LM.shoulder.left, LM.shoulder.right]) ? trunkLateralRaw : NaN;
 
   // F4 Kurma: geri salınımda vuruş bacağının diz bükülme zirvesi (Ş4 ile aynı tanım)
-  const backswing = Math.max(...before.map((f) => kneeFlexion(f, side)));
+  const backswingRaw = Math.max(...before.map((f) => kneeFlexion(f, side)));
+  const backswing = visOk(p, [LM.hip[side], LM.knee[side], LM.ankle[side]]) ? backswingRaw : NaN;
 
   // F5 Takibin çaprazlaması: temastan sonra vuruş ayak bileği, temas anındaki destek ayak
   // bileğini bacak boyuna oranla ne kadar geçti. + = beklenen yönde çapraz geçiş (sarma takip)
   const supAnkleX = p[LM.ankle[sup]].x;
-  const crossing = Math.max(...after.map((f) => (mirror * (supAnkleX - f[LM.ankle[side]].x)) / leg));
+  const crossingRaw = Math.max(...after.map((f) => (mirror * (supAnkleX - f[LM.ankle[side]].x)) / leg));
+  const crossing = visOk(p, [LM.ankle[sup]]) ? crossingRaw : NaN;
 
   return { dir: mirror, approachAngle, supportLateral, trunkLateral, backswing, crossing };
 }
