@@ -6,11 +6,14 @@
 // kendisine verilen `video` elemanını (ve vision.js'i) kullanır — bir <video id="..."> arar gibi
 // document'a gitmez. Saf kısımlar (collectKicks, analyzeKick, eşleştirme/tolerans) analysis.js'te:
 // vision.js Node'da import edilemediği için (CDN URL'i), o dosya Node testlerinde kullanılabiliyor.
-import { processRange } from './vision.js?v=12';
-import { candidateWindows } from './scan.js?v=12';
-import { collectKicks, analyzeKick } from './analysis.js?v=12';
+import { processRange, setMoveNetEnabled, getVisionStats } from './vision.js?v=15';
+import { candidateWindows } from './scan.js?v=15';
+import { collectKicks, analyzeKick } from './analysis.js?v=15';
 
 export { collectKicks, analyzeKick };
+// cp-12-movenet: vision.js'in MoveNet açma/kapama ve istatistik uçları, app.js ve regresyon
+// sayfası vision.js'e doğrudan import atmasın diye buradan geçiyor (mevcut mimariyle tutarlı).
+export { setMoveNetEnabled, getVisionStats };
 
 // pas 2: her aday pencere bu hızda işlenir (findKicks bunun üstünde ayarlandı)
 export const DENSE_FPS = 30;

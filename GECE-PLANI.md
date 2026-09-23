@@ -14,11 +14,11 @@
 | # | Checkpoint | İçerik | Kim | Durum |
 |---|---|---|---|---|
 | 1 | cp-10-regresyon | `pipeline.js` (tarama akışı app.js'ten ayrılır) + `tests/regresyon.html` + `tests/beklenen.json` | Sonnet A | ✅ cp-10 |
-| 2 | (veri) | Referans klipler: Ronaldo ayak üstü, Messi/Neymar plase, hareketli topa vuruş, arkadan frikik → `test-videolar/referans/` + `KAYNAKLAR.md` | Sonnet B | başladı |
+| 2 | (veri) | Referans klipler: Ronaldo ayak üstü, Messi/Neymar plase, hareketli topa vuruş, arkadan frikik → `test-videolar/referans/` + `KAYNAKLAR.md` | Sonnet B | ✅ 18 klip |
 | 3 | (araştırma) | `RESEARCH-VURUS-TURLERI.md`: plase ve hareketli top parametreleri, bireysel idman çevirisi | Sonnet C | ✅ taslak |
-| 4 | cp-11-evreler | Evre bulucu (yaklaşma, basış, kurma, temas, takip), pencereler saniyeyle | Sonnet | bekliyor (1) |
-| 5 | cp-12-movenet | Adaptör (17→33), movenet.js, vision.js yedek yolu, MoveNet iskeleti farklı renk | Sonnet | bekliyor (1) |
-| 6 | cp-13-vurus-turleri | Plase modu, hareketli top ayrımı, kural setleri, otomatik tür önerisi | Sonnet | bekliyor (2,3,4) |
+| 4 | cp-11-evreler | Evre bulucu (yaklaşma, basış, kurma, temas, takip), pencereler saniyeyle | Sonnet | ✅ |
+| 5 | cp-12-movenet | Adaptör (17→33), movenet.js, vision.js yedek yolu, MoveNet iskeleti farklı renk | Sonnet | ✅ |
+| 6 | cp-13-vurus-turleri | Plase modu, hareketli top ayrımı, kural setleri, otomatik tür önerisi | Sonnet | başladı |
 | 7 | cp-14-referans-dogrulama | Referans kliplerle kalibrasyon, METRICS.md güncelleme | Frodo | bekliyor (5,6) |
 
 ## Kabul kapıları (her checkpoint)

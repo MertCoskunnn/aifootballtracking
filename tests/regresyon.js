@@ -2,12 +2,15 @@
 // böylece "Messi hâlâ 100 mü, Mert hâlâ 82/88 mi" kontrolü elle tıklamaya değil tek bir koda dayanır.
 // tests/beklenen.json'daki her video için ya sadece beklenen zamanın etrafını (mod=pencere, hızlı)
 // ya da videonun tamamını (mod=tam) tarar, bulunan vuruşu analiz eder ve beklenenle karşılaştırır.
-import * as pipeline from '../pipeline.js?v=12';
-import { matchByDuration, withinTolerance } from '../analysis.js?v=12';
+import * as pipeline from '../pipeline.js?v=15';
+import { matchByDuration, withinTolerance } from '../analysis.js?v=15';
 
 const params = new URLSearchParams(location.search);
 const MODE = params.get('mod') === 'tam' ? 'tam' : 'pencere';
 const AUTO = params.get('auto') === '1';
+// cp-12-movenet: A/B için MoveNet yedek yolunu kapatabilme (?movenet=0). Varsayılan açık.
+const MOVENET = params.get('movenet') !== '0';
+pipeline.setMoveNetEnabled(MOVENET);
 
 const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
@@ -84,13 +87,22 @@ function drawFrame(frame) {
 // bu klipte ne kadar iskelet bulabildiğini raporluyoruz (vision.js'teki nota bakınca beklenen: az).
 async function processInfoOnly(entry, filename, started) {
   const dur = await pipeline.realDuration(video);
-  const frames = await pipeline.runPass(video, 0, dur, pipeline.DENSE_FPS, { onFrame: drawFrame, shouldStop: () => false });
+  // Bilgi satırı: tüm klip taranır ama kaba hızda (5 fps). 30 fps kalabalık yayında 10 dk+ sürüyordu.
+  const frames = await pipeline.runPass(video, 0, dur, pipeline.COARSE_FPS, { onFrame: drawFrame, shouldStop: () => false });
   const total = frames.length;
   const withPerson = frames.filter((f) => (f.people || []).length > 0).length;
-  const avgPeoplePerFrame = frames.reduce((s, f) => s + (f.people || []).length, 0) / (total || 1);
+  const totalSkeletons = frames.reduce((s, f) => s + (f.people || []).length, 0);
+  const avgPeoplePerFrame = totalSkeletons / (total || 1);
+  // cp-12-movenet: bu klip tam olarak MoveNet'in kurtarması gereken durum (arkadan çekim,
+  // BlazePose yüze bağımlı olduğu için bulamıyor). p.src==='movenet' işaretli iskeletleri sayıp
+  // vision.js'in kendi sayaçlarını (çağrı/kabul) da ekliyoruz — Frodo tarayıcıda bunu görmeli.
+  const moveNetSkeletons = frames.reduce((s, f) => s + (f.people || []).filter((p) => p.src === 'movenet').length, 0);
+  const stats = pipeline.getVisionStats();
   return {
     id: entry.id, label: entry.label, file: filename, infoOnly: true,
     frameCount: total, avgPeoplePerFrame, fractionWithPerson: total ? withPerson / total : 0,
+    moveNetSkeletons, moveNetFraction: totalSkeletons ? moveNetSkeletons / totalSkeletons : 0,
+    moveNetCalls: stats.moveNetCalls, moveNetAccepted: stats.moveNetAccepted,
     durationSec: (performance.now() - started) / 1000,
   };
 }
@@ -158,7 +170,7 @@ function renderRow(row) {
     return;
   }
   if (row.infoOnly) {
-    tr.innerHTML = `<td>${row.label}</td><td colspan="8" class="info">bilgi: ${row.frameCount} kare, kişi/kare ort. ${fmtNum(row.avgPeoplePerFrame)}, en az 1 iskelet oranı %${fmtNum(row.fractionWithPerson * 100, 1)}, süre ${fmtNum(row.durationSec, 1)} sn</td>`;
+    tr.innerHTML = `<td>${row.label}</td><td colspan="8" class="info">bilgi: ${row.frameCount} kare, kişi/kare ort. ${fmtNum(row.avgPeoplePerFrame)}, en az 1 iskelet oranı %${fmtNum(row.fractionWithPerson * 100, 1)}, MoveNet iskelet ${row.moveNetSkeletons} (%${fmtNum(row.moveNetFraction * 100, 1)}), MoveNet çağrı/kabul ${row.moveNetCalls}/${row.moveNetAccepted}, süre ${fmtNum(row.durationSec, 1)} sn</td>`;
     tbody.appendChild(tr);
     return;
   }

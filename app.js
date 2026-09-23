@@ -7,9 +7,9 @@
 // tarayıcıda çalışan regresyon kontrol sayfası (tests/regresyon.html) AYNI kodu çalıştırmalı,
 // yoksa "Messi hâlâ 100 mü" kontrolü sadece burada doğru, orada yanlış olabilir. Bu dosyada artık
 // sadece arayüz ve akış var; tarama adımlarının kendisi pipeline.js'te.
-import * as pipeline from './pipeline.js?v=12';
-import { measure, measureFreeKick, buildTrack } from './metrics.js?v=12';
-import { evaluate } from './coach.js?v=12';
+import * as pipeline from './pipeline.js?v=15';
+import { measure, measureFreeKick, buildTrack } from './metrics.js?v=15';
+import { evaluate } from './coach.js?v=15';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');
@@ -244,10 +244,15 @@ const BONES = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 
 function drawPose(p, s, main) {
   const footVal = effectiveFoot();
   const kick = footVal === 'right' ? [24, 26, 28, 30, 32] : [23, 25, 27, 29, 31];
+  // cp-12-movenet: p.src === 'movenet' ise bu iskelet BlazePose'un bulamadığı bir kutuda
+  // MoveNet'ten geldi (dizi özelliği, bkz. vision.js). Vuran bacak turuncusu aynen kalsın diye
+  // sadece varsayılan yeşili camgöbeğiyle değiştiriyoruz — hata ayıklama/içerik videosunda
+  // "ikinci göz devrede" görünsün diye.
+  const boneColor = p.src === 'movenet' ? '#4fc3f7' : '#3ddc84';
   ctx.globalAlpha = main ? 1 : 0.35;
   ctx.lineWidth = 3 * s;
   for (const [a, b] of BONES) {
-    ctx.strokeStyle = main && kick.includes(a) && kick.includes(b) ? '#ffb547' : '#3ddc84';
+    ctx.strokeStyle = main && kick.includes(a) && kick.includes(b) ? '#ffb547' : boneColor;
     ctx.beginPath(); ctx.moveTo(p[a].x, p[a].y); ctx.lineTo(p[b].x, p[b].y); ctx.stroke();
   }
   if (main) {
@@ -437,7 +442,7 @@ function runAnalysis() {
       // measure() temas civarındaki pencereleri (Ş5/Ş7/Ş8) saniyeye çevirmek için fps ister:
       // burada her zaman yoğun geçişin (DENSE_FPS) karelerini kullanıyoruz.
       const m = mode === 'freekick'
-        ? measureFreeKick(state.track, state.contact, state.ball, foot)
+        ? measureFreeKick(state.track, state.contact, state.ball, foot, pipeline.DENSE_FPS)
         : measure(state.track, state.contact, state.ball, foot, pipeline.DENSE_FPS);
       res = evaluate(m, mode);
     }

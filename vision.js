@@ -7,6 +7,13 @@
 // oyuncunun ayak çevresi kırpılıp büyütülünce top 0.57 güvenle bulundu. Nesne modeli küçük
 // nesnelerde zayıf, kırpıp büyütmek topu modelin gözünde büyütüyor.
 import { PoseLandmarker, ObjectDetector, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/vision_bundle.mjs';
+// cp-12-movenet: "ikinci göz". BlazePose kişiyi bulurken yüze dayanıyor; sırtı kameraya dönük
+// oyuncuda (arkadan çekilmiş frikik) hiç iskelet çıkmıyor. MoveNet yüze bağımlı değil, aynı kişi
+// kutusunda BlazePose başarısız olunca devreye girer (aşağıdaki personBoxes döngüsü). Ağır
+// (TF.js/model) iş movenet.js'te, saf 17→33 nokta dönüşümü keypoints.js'te (Node testli) —
+// bu dosya sadece ikisini birbirine bağlar.
+import * as movenet from './movenet.js?v=15';
+import { mapCocoToMediapipe, acceptMoveNetPose } from './keypoints.js?v=15';
 
 const BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm';
 const POSE_MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task';
@@ -34,6 +41,61 @@ async function load() {
 const isBall = (d) => d.categories[0].categoryName === 'sports ball';
 const PERSON_MIN_SCORE = 0.3;
 const MAX_PERSON_CROPS = 8;
+const MOVENET_INPUT = 256; // MoveNet Thunder'ın beklediği girdi boyutu (piksel), CROP'tan (320) farklı
+
+// --- MoveNet yedek yolu: durum, açma/kapama, istatistikler (cp-12-movenet) ---
+let moveNetEnabled = true; // varsayılan açık (GECE-PLANI)
+let moveNetModel = null;
+let moveNetLoadPromise = null;
+let moveNetFailed = false; // TF.js/model bir kez yüklenemezse kalıcı kapanır, tarama çökmesin
+const visionStats = { moveNetCalls: 0, moveNetAccepted: 0, loadMs: 0 };
+
+/** Regresyon sayfası (?movenet=0) ve ileride app.js için A/B anahtarı. */
+export function setMoveNetEnabled(v) { moveNetEnabled = !!v; }
+
+/** { moveNetCalls, moveNetAccepted, loadMs } — regresyon sayfası gösterebilsin diye. */
+export function getVisionStats() { return { ...visionStats }; }
+
+// TF.js + modeli bir kez yükler (sonraki çağrılar aynı sözü paylaşır). Hata olursa MoveNet'i
+// kalıcı kapatır ve bir kez uyarır — tarama bu yüzden asla çökmemeli.
+async function ensureMoveNetModel() {
+  if (moveNetModel) return moveNetModel;
+  if (moveNetFailed) return null;
+  if (!moveNetLoadPromise) {
+    const started = performance.now();
+    moveNetLoadPromise = movenet.loadMoveNetModel()
+      .then((m) => { visionStats.loadMs = performance.now() - started; return m; })
+      .catch((err) => {
+        console.warn('MoveNet yüklenemedi, bu oturumda kalıcı olarak kapatıldı:', err);
+        moveNetFailed = true;
+        return null;
+      });
+  }
+  moveNetModel = await moveNetLoadPromise;
+  return moveNetModel;
+}
+
+// BlazePose'un (poseOne) iskelet bulamadığı kişi kutusunu MoveNet'e verir. canvas256: aynı
+// kırpıntı bölgesinin 256x256'ya çizilmiş hali. x0,y0,s: kırpıntının tam karedeki yeri/boyu
+// (mapCocoToMediapipe için). Dönen: MediaPipe-33 iskeleti (p.src='movenet' işaretli) ya da null.
+async function tryMoveNet(canvas256, x0, y0, s) {
+  const model = await ensureMoveNetModel();
+  if (!model) return null;
+  visionStats.moveNetCalls++;
+  let coco;
+  try {
+    coco = movenet.detect(model, canvas256);
+  } catch (err) {
+    console.warn('MoveNet çalıştırılırken hata, bu oturumda kalıcı olarak kapatıldı:', err);
+    moveNetFailed = true;
+    return null;
+  }
+  if (!acceptMoveNetPose(coco)) return null; // bacak güveni düşük: muhtemelen insan değil
+  visionStats.moveNetAccepted++;
+  const p = mapCocoToMediapipe(coco, x0, y0, s);
+  p.src = 'movenet'; // dizi özelliği: app.js drawPose'da farklı renk için (BlazePose'ta yok)
+  return p;
+}
 
 function seek(video, t) {
   return new Promise((res) => {
@@ -60,6 +122,10 @@ export async function processRange(video, { t0 = 0, t1 = video.duration, fps = 3
   const fctx = frameCv.getContext('2d');
   const cropCv = Object.assign(document.createElement('canvas'), { width: CROP, height: CROP });
   const cctx = cropCv.getContext('2d');
+  // MoveNet'in kendi girdi boyutu (256) CROP'tan (320) farklı olduğu için ayrı bir tuval: cropCv'yi
+  // burada yeniden boyutlandırmak onu temizleyip ball-tarama döngüsündeki kullanımını bozardı.
+  const mnCv = Object.assign(document.createElement('canvas'), { width: MOVENET_INPUT, height: MOVENET_INPUT });
+  const mnCtx = mnCv.getContext('2d');
   const total = Math.max(1, Math.floor((t1 - t0) * fps));
   const frames = [];
   let lastBall = null;
@@ -80,6 +146,12 @@ export async function processRange(video, { t0 = 0, t1 = video.duration, fps = 3
       .sort((a, b) => b.categories[0].score - a.categories[0].score)
       .map((d) => d.boundingBox)
       .slice(0, MAX_PERSON_CROPS);
+    // MoveNet sadece topa yakın kutularda çalışır. İlk denemede (2026-09-24) yandan çekilmiş Messi
+    // videosunda bile 31 kez devreye girdi (arkadaki insanlar) ve taramayı %57 yavaşlattı, puan
+    // değişmediği halde. Vuruşu yapan kişi her zaman topun yanındadır; uzaktakinin iskeleti analize
+    // girmez. Karede hiç top bilinmiyorsa (top henüz bulunamadı) en güvenli tek kutuya izin verilir.
+    const ballRefs = lastBall ? [...balls, lastBall] : balls;
+    let mnBudget = ballRefs.length ? MAX_PERSON_CROPS : 1;
     for (const b of personBoxes) {
       const covered = people.some((p) => inBox(hipMid(p), b));
       if (covered) continue;
@@ -87,7 +159,17 @@ export async function processRange(video, { t0 = 0, t1 = video.duration, fps = 3
       cctx.clearRect(0, 0, CROP, CROP);
       cctx.drawImage(frameCv, x0, y0, s, s, 0, 0, CROP, CROP);
       const found = poseOne.detect(cropCv).landmarks[0];
-      if (found) people.push(found.map((q) => ({ x: x0 + q.x * s, y: y0 + q.y * s, v: q.visibility ?? 1 })));
+      if (found) {
+        people.push(found.map((q) => ({ x: x0 + q.x * s, y: y0 + q.y * s, v: q.visibility ?? 1 })));
+      } else if (moveNetEnabled && !moveNetFailed && mnBudget > 0 && nearBall(b, ballRefs)) {
+        mnBudget--;
+        // Yedek yol: BlazePose bu kutuda kimseyi bulamadı (sırtı kameraya dönük olabilir).
+        // AYNI kırpıntı bölgesini (x0,y0,s) MoveNet'e veriyoruz, başka hiçbir yerde çalışmıyor.
+        mnCtx.clearRect(0, 0, MOVENET_INPUT, MOVENET_INPUT);
+        mnCtx.drawImage(frameCv, x0, y0, s, s, 0, 0, MOVENET_INPUT, MOVENET_INPUT);
+        const mnPerson = await tryMoveNet(mnCv, x0, y0, s);
+        if (mnPerson) people.push(mnPerson);
+      }
     }
     // Top kırpıntıları: her kişinin ayak çevresi + topun son bilinen yeri
     const regions = people.map(feetRegion);
@@ -105,6 +187,15 @@ export async function processRange(video, { t0 = 0, t1 = video.duration, fps = 3
     onFrame?.(frame, i, total);
   }
   return frames;
+}
+
+// Kişi kutusu topa yakın mı? Kutu yatayda 1.5 boy, dikeyde yarım boy genişletilir: koşu sırasında
+// oyuncu topa birkaç adım uzakta olabilir. Bilinen top yoksa true (karar bütçeye kalır).
+function nearBall(b, refs) {
+  if (!refs.length) return true;
+  const padX = 1.5 * b.height, padY = 0.5 * b.height;
+  return refs.some((r) => r.x >= b.originX - padX && r.x <= b.originX + b.width + padX
+    && r.y >= b.originY - padY && r.y <= b.originY + b.height + padY);
 }
 
 const hipMid = (p) => ({ x: (p[23].x + p[24].x) / 2, y: (p[23].y + p[24].y) / 2 });
