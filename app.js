@@ -3,11 +3,11 @@
 // uygulama vuruşları kendisi bulur (uzun videolarda iki geçişli tarama), bir liste gösterir, kullanıcı
 // bir vuruşa tıklar. Elle işaretleme akışı hâlâ var: hem "vuruş bulunamadı" durumunda hem de
 // otomatik sonucu düzeltmek isteyen kullanıcı için bir yedek yol ("Elle düzelt").
-import { processRange } from './vision.js?v=9';
-import { findKicks, classifyView, suggestMode } from './detect.js?v=9';
-import { candidateWindows } from './scan.js?v=9';
-import { measure, measureFreeKick, buildTrack } from './metrics.js?v=9';
-import { evaluate } from './coach.js?v=9';
+import { processRange } from './vision.js?v=10';
+import { findKicks, classifyView, suggestMode } from './detect.js?v=10';
+import { candidateWindows } from './scan.js?v=10';
+import { measure, measureFreeKick, buildTrack } from './metrics.js?v=10';
+import { evaluate } from './coach.js?v=10';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');
@@ -168,7 +168,12 @@ async function scanVideo() {
   }
   setBusy(false);
   renderKickList();
-  setStatus(`Tarama tamam: ${state.kicks.length} vuruş bulundu. Aşağıdaki listeden birine tıkla.`);
+  // İlk vuruşu hemen aç. Eskiden sadece liste çıkıyordu, hiçbir vuruş yüklenmiyordu: oynat
+  // butonu çalışmıyor, video işlemenin son karesinde "donmuş" görünüyordu (Mert'in 5 sn'lik testi).
+  loadKick(0);
+  setStatus(state.kicks.length > 1
+    ? `Tarama tamam: ${state.kicks.length} vuruş bulundu, ilki açıldı. Diğerleri için listeden birine tıkla.`
+    : 'Tarama tamam: vuruş bulundu ve açıldı. ⏵ ile oynatabilirsin.');
 }
 
 // --- kare gösterimi / oynatma (hem tarama sonrası yüklenen pencere hem elle-düzelt için ortak) ---
