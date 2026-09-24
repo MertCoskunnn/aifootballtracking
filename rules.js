@@ -207,20 +207,23 @@ const ANGLE_MESSAGE = {
 // METRICS.md) — sahte bir "Ronaldo'nun dizi 47° açılır" gibi uydurma sayı YOK. `note` alanı bunu
 // açıkça işaretliyor, gerçek klip geldiğinde sadece o hücre güncellenecek.
 const MESSI_SOURCE = 'METRICS.md ölçümlerinden (Messi referans fotoğraf/video, MV1/MV2/M0/M1)';
-const PENDING = (name) => `[T] ${name} idman referansı bekleniyor, eşikler mevcut literatür/Messi değerleriyle dolduruldu (sahte ölçüm yok)`;
+// Denetim notu: bu metin doğrudan kullanıcıya gösteriliyor (app.js runAnalysis rapor başlığı,
+// "Referans: X (...) — <note>"). Eskiden "[T] ... (sahte ölçüm yok)" gibi iç/geliştirici notasyonu
+// sızdırıyordu; kullanıcı için sade tutuluyor, ayrıntı yukarıdaki DÜRÜSTLÜK NOTU yorumunda kalıyor.
+const PENDING = 'referans ölçümü bekleniyor';
 
 const REFERENCE = {
   shot: {
-    right: { name: 'Ronaldo', note: PENDING('Ronaldo') },
-    left: { name: 'Ronaldo', note: PENDING('Ronaldo') },
+    right: { name: 'Ronaldo', note: PENDING },
+    left: { name: 'Ronaldo', note: PENDING },
   },
   placement: {
     left: { name: 'Messi', note: MESSI_SOURCE },
-    right: { name: 'Neymar', note: PENDING('Neymar') },
+    right: { name: 'Neymar', note: PENDING },
   },
   freekick: {
     left: { name: 'Messi', note: MESSI_SOURCE },
-    right: { name: 'Neymar', note: PENDING('Neymar') },
+    right: { name: 'Neymar', note: PENDING },
   },
   pass: {
     right: { name: null, note: null },

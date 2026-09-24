@@ -34,36 +34,42 @@ test('getRuleSet: frikik yandan ölçülemez', () => {
 
 // === 2. Ölçülebilir kombinasyonlar + referans oyuncu ===
 
-test('getRuleSet: ayak üstü şut (sağ ve sol) yandan ölçülür, referans Ronaldo, [T] notlu', () => {
+// Not (cp-20-rapor-temizligi): referansNotu artık kullanıcıya gösterilen SADE metin ("referans
+// ölçümü bekleniyor"), eski iç "[T] ... (sahte ölçüm yok)" notasyonunu taşımıyor. Testler artık
+// "ölçüm bekleniyor mu (pending) yoksa gerçek kaynaklı mı (METRICS.md/Messi)" ayrımını bu sade
+// metnin varlığına/yokluğuna bakarak doğruluyor.
+const PENDING_MARK = 'ölçümü bekleniyor';
+
+test('getRuleSet: ayak üstü şut (sağ ve sol) yandan ölçülür, referans Ronaldo, ölçüm bekleniyor notlu', () => {
   for (const foot of ['right', 'left']) {
     const res = getRuleSet('shot', foot, 'side');
     assert.equal(res.olculemez, false);
     assert.equal(res.referans, 'Ronaldo');
-    assert.match(res.referansNotu, /\[T\]/);
+    assert.ok(res.referansNotu.includes(PENDING_MARK));
     assert.equal(res.kurallar, RULES.shot, 'coach.js#evaluate ile aynı kural dizisi kullanılmalı');
   }
 });
 
-test('getRuleSet: plase sol → Messi (kaynaklı, [T] yok), plase sağ → Neymar ([T])', () => {
+test('getRuleSet: plase sol → Messi (kaynaklı, bekleyen not yok), plase sağ → Neymar (bekleyen not var)', () => {
   const left = getRuleSet('placement', 'left', 'side');
   assert.equal(left.olculemez, false);
   assert.equal(left.referans, 'Messi');
-  assert.equal(left.referansNotu.includes('[T]'), false, 'Messi referansı [T] olmamalı, METRICS.mddan geliyor');
+  assert.equal(left.referansNotu.includes(PENDING_MARK), false, 'Messi referansı bekleyen olmamalı, METRICS.mddan geliyor');
 
   const right = getRuleSet('placement', 'right', 'side');
   assert.equal(right.olculemez, false);
   assert.equal(right.referans, 'Neymar');
-  assert.match(right.referansNotu, /\[T\]/);
+  assert.ok(right.referansNotu.includes(PENDING_MARK));
 });
 
-test('getRuleSet: frikik sol → Messi (kaynaklı), frikik sağ → Neymar ([T])', () => {
+test('getRuleSet: frikik sol → Messi (kaynaklı), frikik sağ → Neymar (bekleyen not var)', () => {
   const left = getRuleSet('freekick', 'left', 'behind');
   assert.equal(left.referans, 'Messi');
-  assert.equal(left.referansNotu.includes('[T]'), false);
+  assert.equal(left.referansNotu.includes(PENDING_MARK), false);
 
   const right = getRuleSet('freekick', 'right', 'behind');
   assert.equal(right.referans, 'Neymar');
-  assert.match(right.referansNotu, /\[T\]/);
+  assert.ok(right.referansNotu.includes(PENDING_MARK));
 });
 
 test('getRuleSet: pas için referans oyuncu yok (sadece araştırma eşikleri)', () => {

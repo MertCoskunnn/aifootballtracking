@@ -36,15 +36,17 @@ export function collectKicks(denseFrames, fps) {
 
 /**
  * Bir vuruşu ölçer ve puanlar: buildTrack (temas karesi + rest topu) + measure/measureFreeKick + evaluate.
- * mode/foot 'auto' ise (ya da hiç verilmezse) vuruşun kendi önerisini kullanır: mod için
- * kick.suggestion.mode (yoksa 'shot'), ayak için kick.foot — app.js'teki effectiveMode/effectiveFoot
- * ile aynı mantık, tek yerde toplandı.
+ * mode/foot hiç verilmezse vuruşun kendi önerisini kullanır: mod için kick.suggestion.mode
+ * (yoksa 'shot'), ayak için kick.foot. (Denetim notu: 'auto' özel dizge yolu kaldırıldı — app.js
+ * (cp-15-secmeli-menu) artık kullanıcıya her zaman AÇIK mode/foot seçimi zorunlu kılıyor, hiçbir
+ * çağıran taraf 'auto' geçirmiyordu; gerçek kullanılan tek yol, opts hiç verilmediğindeki bu
+ * öneri-tabanlı varsayılandı, o kaldı.)
  * kick: collectKicks'in ürettiği nesnelerden biri (frames, contact, rest, fps taşımalı).
  * Dönen: { mode, foot, track, measurements, result }
  */
-export function analyzeKick(kick, { mode = 'auto', foot = 'auto' } = {}) {
-  const effMode = mode === 'auto' ? (kick.suggestion?.mode || 'shot') : mode;
-  const effFoot = foot === 'auto' ? (kick.foot || 'right') : foot;
+export function analyzeKick(kick, { mode, foot } = {}) {
+  const effMode = mode || kick.suggestion?.mode || 'shot';
+  const effFoot = foot || kick.foot || 'right';
   const ball = { x: kick.rest.x, y: kick.rest.y };
   const track = buildTrack(kick.frames.map((f) => f.people), kick.contact, ball);
   const measurements = effMode === 'freekick'

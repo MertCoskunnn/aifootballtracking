@@ -56,19 +56,19 @@ test('collectKicks: findKicks çıktısına frames/fps/t/view/suggestion/score e
   assert.equal(k.score, null);
 });
 
-test("analyzeKick: mode/foot 'auto' ise vuruşun suggestion.mode'u (yoksa 'shot') ve kick.foot kullanılır", () => {
+test("analyzeKick: mode/foot verilmezse vuruşun suggestion.mode'u (yoksa 'shot') ve kick.foot kullanılır", () => {
   const { frames } = buildKickFrames();
   const [k] = collectKicks(frames, FPS);
-  const a = analyzeKick(k, { mode: 'auto', foot: 'auto' });
-  assert.equal(a.foot, k.foot, 'auto ayak, vuruşun tespit edilen ayağı olmalı');
-  assert.equal(a.mode, k.suggestion.mode || 'shot', "auto mod, suggestion.mode (yoksa 'shot') olmalı");
+  const a = analyzeKick(k, {});
+  assert.equal(a.foot, k.foot, 'varsayılan ayak, vuruşun tespit edilen ayağı olmalı');
+  assert.equal(a.mode, k.suggestion.mode || 'shot', "varsayılan mod, suggestion.mode (yoksa 'shot') olmalı");
   assert.equal(a.track.length, frames.length, 'track her kare için bir giriş taşımalı');
   assert.ok(a.measurements && typeof a.measurements === 'object');
   assert.ok(a.result && typeof a.result.total === 'number' && Array.isArray(a.result.items),
     'evaluate() çıktısı (total, items) korunmalı');
 });
 
-test('analyzeKick: mode/foot açıkça seçilmişse (auto değilse) doğrudan kullanılır', () => {
+test('analyzeKick: mode/foot açıkça seçilmişse doğrudan kullanılır', () => {
   const { frames } = buildKickFrames();
   const [k] = collectKicks(frames, FPS);
   const a = analyzeKick(k, { mode: 'pass', foot: 'left' });
@@ -76,7 +76,7 @@ test('analyzeKick: mode/foot açıkça seçilmişse (auto değilse) doğrudan ku
   assert.equal(a.foot, 'left');
 });
 
-test('analyzeKick: opts verilmezse (varsayılan auto) hata vermez', () => {
+test('analyzeKick: opts hiç verilmezse hata vermez, aynı varsayılanlara düşer', () => {
   const { frames } = buildKickFrames();
   const [k] = collectKicks(frames, FPS);
   const a = analyzeKick(k);
