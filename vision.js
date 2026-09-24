@@ -73,6 +73,13 @@ async function load() {
 
 const isBall = (d) => d.categories[0].categoryName === 'sports ball';
 const PERSON_MIN_SCORE = 0.3;
+
+// İskelet dizisine MediaPipe'ın 3D noktalarını `world` özelliği olarak ekler ({x,y,z} metre, kalça
+// merkezli; y aşağı, z kameraya doğru). MoveNet yedeğinde 3D yok, o iskeletlerde `world` olmaz.
+function withWorld(p, world) {
+  if (world && world.length === 33) p.world = world.map((q) => ({ x: q.x, y: q.y, z: q.z }));
+  return p;
+}
 const MAX_PERSON_CROPS = 8;
 const MOVENET_INPUT = 256; // MoveNet Thunder'ın beklediği girdi boyutu (piksel), CROP'tan (320) farklı
 
@@ -173,7 +180,11 @@ export async function processRange(video, { t0 = 0, t1 = video.duration, fps = 3
     const t = t0 + i / fps;
     await seek(video, Math.min(video.duration - 0.001, t));
     fctx.drawImage(video, 0, 0, W, H);
-    const people = pose.detect(frameCv).landmarks.map((p) => p.map((q) => ({ x: q.x * W, y: q.y * H, v: q.visibility ?? 1 })));
+    // 2026-09-24 gece: MediaPipe'ın 3D (world) noktaları da saklanıyor: kalça merkezli, metre
+    // cinsinden tahmin. Eklem açısı 3D'den hesaplanınca kamera açısından (yandan/arkadan) büyük
+    // ölçüde bağımsız olur (metrics3d.js). 2D veri sözleşmesi değişmez: 3D, dizinin `world` özelliği.
+    const res = pose.detect(frameCv);
+    const people = res.landmarks.map((p, k) => withWorld(p.map((q) => ({ x: q.x * W, y: q.y * H, v: q.visibility ?? 1 })), res.worldLandmarks?.[k]));
     const dets = ball.detect(frameCv).detections;
     const balls = dets.filter(isBall).map((d) => box(d, 0, 0, 1));
     // İki aşamalı iskelet: nesne modelinin bulduğu ama iskeleti henüz çıkmamış her kişi kutusunu
@@ -197,9 +208,11 @@ export async function processRange(video, { t0 = 0, t1 = video.duration, fps = 3
       const s = Math.max(b.width, b.height) * 1.3, x0 = b.originX + b.width / 2 - s / 2, y0 = b.originY + b.height / 2 - s / 2;
       cctx.clearRect(0, 0, CROP, CROP);
       cctx.drawImage(frameCv, x0, y0, s, s, 0, 0, CROP, CROP);
-      const found = poseOne.detect(cropCv).landmarks[0];
+      const one = poseOne.detect(cropCv);
+      const found = one.landmarks[0];
       if (found) {
-        people.push(found.map((q) => ({ x: x0 + q.x * s, y: y0 + q.y * s, v: q.visibility ?? 1 })));
+        // 3D (world) noktalar kırpıntıdan bağımsız: kalça merkezli metre, ölçek/konum dönüşümü gerekmez.
+        people.push(withWorld(found.map((q) => ({ x: x0 + q.x * s, y: y0 + q.y * s, v: q.visibility ?? 1 })), one.worldLandmarks?.[0]));
       } else if (moveNetEnabled && !moveNetFailed && mnBudget > 0 && nearBall(b, ballRefs)) {
         mnBudget--;
         // Yedek yol: BlazePose bu kutuda kimseyi bulamadı (sırtı kameraya dönük olabilir).
