@@ -1,7 +1,7 @@
 // metrics3d.js testleri: 3D açılar kamera yönünden bağımsız mı, referans kıyası doğru mu.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { angle3, posture3d, contactPosture, compareToReference } from '../metrics3d.js';
+import { angle3, posture3d, contactPosture, compareToReference, referenceFor } from '../metrics3d.js';
 
 // Sahte 3D iskelet (metre, y aşağı): sağ ayakla vuran, destek (sol) dizi supportFlex kadar bükük.
 function body({ supportFlex = 30, kickFlex = 45, lean = 0 } = {}) {
@@ -55,4 +55,61 @@ test('compareToReference: referansla aynı postür 100, farklı postür düşük
   assert.ok(c.total < 100);
   assert.equal(c.items[0].key, 'supportKnee');
   assert.match(c.items[0].cumle, /Messi'ye göre destek dizin daha düz/);
+});
+
+// Aynalama: sağ ayaklının vuruşu = sol ayaklının (Messi) ayna görüntüsü. İskeleti x'te aynala ve
+// sol/sağ noktaları yer değiştir: sağ ayakla ölçülen postür, aynadaki sol ayakla ölçülenle aynı olmalı.
+const SWAP = [[11, 12], [13, 14], [23, 24], [25, 26], [27, 28]];
+const mirror = (w) => {
+  const m = w.map((q) => ({ x: -q.x, y: q.y, z: q.z }));
+  for (const [a, b] of SWAP) [m[a], m[b]] = [m[b], m[a]];
+  return m;
+};
+
+test('aynalama: sağ ayaklı postür, aynadaki sol ayaklıyla birebir aynı ölçülür', () => {
+  const w = body({ supportFlex: 25, kickFlex: 55, lean: 8 });
+  const right = posture3d(w, 'right');
+  const left = posture3d(mirror(w), 'left');
+  for (const k of ['supportKnee', 'kickKnee', 'kickHip', 'trunkLean', 'trunkSide', 'armOpen']) {
+    assert.ok(Math.abs(right[k] - left[k]) < 1e-6, `${k}: sağ ${right[k]} ayna-sol ${left[k]}`);
+  }
+});
+
+test('referenceFor: sol ayaklı referans sağ ayağa aynalanır, hedef doksan tarafı doğru', () => {
+  const ref = { foot: 'left', posture: { supportKnee: 30 } };
+  assert.deepEqual(referenceFor(ref, 'left'), { posture: ref.posture, mirrored: false, target: 'sağ' });
+  assert.deepEqual(referenceFor(ref, 'right'), { posture: ref.posture, mirrored: true, target: 'sol' });
+  assert.equal(referenceFor(null, 'left'), null);
+});
+
+test('compareToReference: her farkta ne yapılacağı (tip) söylenir, fark yoksa tip yok', () => {
+  const ref = posture3d(body({ supportFlex: 30 }), 'right');
+  const me = posture3d(body({ supportFlex: 5 }), 'right');
+  const c = compareToReference(me, ref, 'Messi');
+  assert.match(c.items[0].tip, /Destek dizini biraz daha bük/);
+  assert.ok(compareToReference(ref, ref).items.every((i) => i.tip === null));
+});
+
+test('contactPosture: tekrar eden kare (25 fps → 30 fps örnekleme) medyana iki kez girmez', () => {
+  const mk = (f) => Object.assign([], { world: body({ supportFlex: f }) });
+  const a = mk(90);
+  const dup = Object.assign([], { world: a.world.map((q) => ({ ...q })) });
+  // [10, 90, 90(tekrar), 20, 30]: tekrar sayılsa medyan 30 olurdu, atılınca [10,90,20,30] → 25
+  const p = contactPosture([mk(10), a, dup, mk(20), mk(30)], 2, 'right');
+  assert.ok(Math.abs(p.supportKnee - 25) < 0.5, `medyan ${p.supportKnee}`);
+});
+
+test('compareToReference: gürültü bandı içindeki fark ceza almaz, dışındaki alır', () => {
+  const ref = posture3d(body({ supportFlex: 30 }), 'right');
+  const near = posture3d(body({ supportFlex: 38 }), 'right'); // 8° < 10° bant
+  assert.equal(compareToReference(near, ref).total, 100);
+  const far = posture3d(body({ supportFlex: 0 }), 'right'); // 30° → bandın 20° dışında → 0
+  assert.equal(compareToReference(far, ref).items.find((i) => i.key === 'supportKnee').score, 0);
+});
+
+test('Messi referans dosyası: iki vuruşun her biri ortalamaya göre 100 alır', async () => {
+  const fs = await import('node:fs');
+  const ref = JSON.parse(fs.readFileSync(new URL('../referans/messi-plase.json', import.meta.url), 'utf8'));
+  assert.equal(ref.foot, 'left');
+  for (const v of ref.vuruslar) assert.equal(compareToReference(v.posture, ref.posture, 'Messi').total, 100, v.id);
 });

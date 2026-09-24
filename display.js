@@ -19,7 +19,7 @@
 // sabit-top durumunu, eski yol hiç süzmeden alıyordu). Artık kural net: temas SONRASI nişangah
 // YALNIZ geçerli bir fit'ten gelir; fit yoksa (RANSAC yetersiz/güvenilmez veri yüzünden kuramadıysa
 // ya da sabit-top şüphesiyle reddettiyse) hiçbir top gösterilmez — "belirsiz ama yanlış" yerine "yok".
-import { flightAt } from './trajectory.js?v=40';
+import { flightAt } from './trajectory.js?v=41';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const FEET = [27, 28, 31, 32]; // ayak bileği (sol/sağ), ayak ucu (sol/sağ)

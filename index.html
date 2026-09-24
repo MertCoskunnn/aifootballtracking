@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Futbol AI Hoca</title>
-  <link rel="stylesheet" href="style.css?v=40">
+  <link rel="stylesheet" href="style.css?v=41">
 </head>
 <body>
   <header>
@@ -28,18 +28,18 @@
         </label>
         <label>Vuruş türü
           <select id="mode">
-            <option value="" selected disabled>Seç...</option>
-            <option value="shot">Ayak üstü şut</option>
-            <option value="placement">Plase (iç taraf, koşarken)</option>
-            <option value="pass">Pas (iç taraf)</option>
-            <option value="freekick">Frikik / falsolu</option>
+            <!-- v1 (2026-09-25, Mert): tek teknik, Messi referanslı doksana plase. Diğerleri yeni referanslarla açılacak. -->
+            <option value="placement" selected>Doksana plase (iç ayak, falsolu)</option>
+            <option value="shot" disabled>Ayak üstü şut (yakında)</option>
+            <option value="pass" disabled>Pas (yakında)</option>
+            <option value="freekick" disabled>Frikik (yakında)</option>
           </select>
         </label>
         <label>Vuran ayak
           <select id="foot">
             <option value="" selected disabled>Seç...</option>
-            <option value="right">Sağ</option>
-            <option value="left">Sol</option>
+            <option value="left">Sol → sağ doksana</option>
+            <option value="right">Sağ → sol doksana</option>
           </select>
         </label>
       </div>
@@ -81,6 +81,6 @@
 
   <footer>Video cihazından çıkmaz. Analiz tarayıcında yapılır. <a href="RESEARCH.md">Kurallar nereden geliyor?</a></footer>
 
-  <script type="module" src="app.js?v=40"></script>
+  <script type="module" src="app.js?v=41"></script>
 </body>
 </html>

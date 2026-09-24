@@ -277,9 +277,11 @@ const REFERENCE = {
     right: { name: 'Ronaldo', note: PENDING },
     left: { name: 'Ronaldo', note: PENDING },
   },
+  // 2026-09-25 (Mert): v1'in tek tekniği doksana plase. Sol ayak sağ doksana = Messi'nin idman
+  // vuruşu; sağ ayak sol doksana = aynı vuruşun ayna görüntüsü (metrics3d.js#referenceFor).
   placement: {
-    left: { name: 'Messi', note: MESSI_SOURCE },
-    right: { name: 'Neymar', note: PENDING },
+    left: { name: 'Messi', note: 'sol ayak, sağ doksana (idman videosu, 3D temas postürü)' },
+    right: { name: 'Messi', note: 'sağ ayak için aynalandı, sol doksana (idman videosu, 3D temas postürü)' },
   },
   freekick: {
     left: { name: 'Messi', note: MESSI_SOURCE },

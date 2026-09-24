@@ -64,20 +64,28 @@ export function posture3d(w, kickSide) {
 export const POSTURE_KEYS = ['supportKnee', 'kickKnee', 'kickHip', 'trunkLean', 'trunkSide', 'armOpen'];
 
 /**
- * Temas civarındaki birkaç karenin (track[contact-1..contact+1]) medyanı: tek karedeki 3D tahmin
- * gürültüsünü azaltır. track: kare başına iskelet (world özelliği olabilir). Dönen: postür ya da null.
+ * Temas civarındaki karelerin (track[contact-half..contact+half]) medyanı: tek karedeki 3D tahmin
+ * gürültüsünü azaltır. 2026-09-25 Messi ölçümü: arka arkaya karelerde destek dizi 23°, 50°, 14°
+ * okunabiliyor, bu yüzden pencere ±2 kare (30 fps'te ~0.13 sn).
+ * Tekrar eden kare atılır: 25 fps video 30 fps örneklenince bazı kareler iki kez gelir, aynı
+ * tahmini iki kez saymak medyanı o kareye çeker.
+ * track: kare başına iskelet (world özelliği olabilir). Dönen: postür ya da null.
  */
-export function contactPosture(track, contact, kickSide, half = 1) {
+export function contactPosture(track, contact, kickSide, half = 2) {
   const reads = [];
+  let prev = null;
   for (let i = contact - half; i <= contact + half; i++) {
-    const p = posture3d(track?.[i]?.world, kickSide);
-    if (p) reads.push(p);
+    const w = track?.[i]?.world;
+    if (w && prev && w.every((q, j) => q.x === prev[j].x && q.y === prev[j].y && q.z === prev[j].z)) continue;
+    const p = posture3d(w, kickSide);
+    if (p) { reads.push(p); prev = w; }
   }
   if (!reads.length) return null;
   const out = {};
   for (const k of POSTURE_KEYS) {
-    const v = reads.map((r) => r[k]).filter(Number.isFinite).sort((a, b) => a - b);
-    out[k] = v.length ? v[Math.floor(v.length / 2)] : NaN;
+    const v = reads.map((r) => r[k]).filter(Number.isFinite).sort((x, y) => x - y);
+    const m = v.length >> 1;
+    out[k] = !v.length ? NaN : v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
   }
   return out;
 }
@@ -86,7 +94,12 @@ export const POSTURE_LABEL = {
   supportKnee: 'Destek dizi', kickKnee: 'Vuran diz', kickHip: 'Vuran bacağın kalçası',
   trunkLean: 'Gövdenin eğimi', trunkSide: 'Gövdenin yana yatışı', armOpen: 'Karşı kol',
 };
-// [T] Referanstan bu kadar derece fark = 0 puan (doğrusal). Gerçek videolarla ayarlanacak.
+// Ölçüm gürültüsü bandı (derece): bu kadar fark ceza almaz. Kaynak: Messi'nin aynı videodaki iki
+// frikiği (aynı oyuncu, aynı teknik) arasındaki fark: destek dizi 14°, kol 15°, gövde eğimi 6°,
+// yana yatış 5°, vuran diz 2°, kalça 1° (METRICS.md "3D referans"). Bandın yarısı ile tamamı arası
+// seçildi; vuran diz/kalça için tek videonun ±2 kare oynaması (~8°) esas alındı.
+export const POSTURE_DEAD = { supportKnee: 10, kickKnee: 8, kickHip: 8, trunkLean: 5, trunkSide: 5, armOpen: 15 };
+// [T] Bandın dışında bu kadar derece daha fark = 0 puan (doğrusal). Mert'in videolarıyla ayarlanacak.
 export const POSTURE_TOL = { supportKnee: 20, kickKnee: 30, kickHip: 25, trunkLean: 15, trunkSide: 15, armOpen: 35 };
 const WEIGHT = { supportKnee: 3, kickKnee: 1, kickHip: 2, trunkLean: 3, trunkSide: 2, armOpen: 1 };
 
@@ -100,6 +113,29 @@ const PHRASE = {
   armOpen: ['karşı kolun daha kapalı', 'karşı kolun daha açık'],
 };
 
+// Farkı kapatmak için ne yapmalı: [değer referanstan küçükse, büyükse].
+const ADVICE = {
+  supportKnee: ['Destek dizini biraz daha bük, yaylı bas.', 'Destek bacağını daha sağlam tut, bu kadar çökme.'],
+  kickKnee: ['Temasta vuran dizini bu kadar erken açma, bacağı kamçı gibi geç aç.', 'Temasa kadar dizini daha fazla aç, topa bükük bacakla değme.'],
+  kickHip: ['Uyluğunu topa doğru daha fazla öne getir, bacak gövdenin gerisinde kalmasın.', 'Uyluğun çok önde; topa biraz daha geriden, bacağı savurarak gel.'],
+  trunkLean: ['Gövdeni topun üstüne biraz daha eğ.', 'Gövdeni bu kadar eğme, daha dik kal.'],
+  trunkSide: ['Gövdeni destek ayağının tarafına biraz daha yatır.', 'Gövdeni destek tarafına bu kadar yatırma, dengen kayıyor.'],
+  armOpen: ['Karşı kolunu yana daha fazla aç, denge ondan gelir.', 'Karşı kolunu bu kadar açma.'],
+};
+
+/**
+ * Aynalama (Mert'in kararı, 2026-09-25): referans Messi'nin SOL ayakla sağ doksana vuruşu. Sağ
+ * ayaklının sol doksana vuruşu bunun ayna görüntüsüdür. Postür ölçüleri vuran/destek tarafına göre
+ * tanımlı (sağ/sol değil) olduğu için aynalama ölçüde kendiliğinden olur: sağ ayaklının destek dizi
+ * Messi'nin destek diziyle, vuran dizi Messi'nin vuran diziyle kıyaslanır.
+ * ref: referans/messi-plase.json içeriği. foot: kullanıcının vuran ayağı.
+ * Dönen: { posture, mirrored, target } — target: hedeflenen doksan ('sağ' | 'sol').
+ */
+export function referenceFor(ref, foot) {
+  if (!ref?.posture) return null;
+  return { posture: ref.posture, mirrored: foot !== ref.foot, target: foot === 'left' ? 'sağ' : 'sol' };
+}
+
 /**
  * Kullanıcının temas postürünü referansla kıyaslar. Dönen:
  * { total (0-100) | null, items: [{key, label, value, ref, diff, score, cumle}], en buyuk farklar önce }
@@ -110,10 +146,12 @@ export function compareToReference(p, ref, refName = 'Referans') {
   for (const k of POSTURE_KEYS) {
     if (!Number.isFinite(p[k]) || !Number.isFinite(ref[k])) continue;
     const diff = p[k] - ref[k];
-    const score = Math.max(0, Math.round(100 * (1 - Math.abs(diff) / POSTURE_TOL[k])));
-    const cumle = Math.abs(diff) < 3 ? `${POSTURE_LABEL[k]}: ${refName} ile aynı.`
+    const over = Math.max(0, Math.abs(diff) - POSTURE_DEAD[k]);
+    const score = Math.max(0, Math.round(100 * (1 - over / POSTURE_TOL[k])));
+    const cumle = over === 0 ? `${POSTURE_LABEL[k]}: ${refName} ile aynı.`
       : `${refName}'ye göre ${PHRASE[k][diff < 0 ? 0 : 1]} (${Math.round(Math.abs(diff))}° fark).`;
-    items.push({ key: k, label: POSTURE_LABEL[k], value: p[k], ref: ref[k], diff, score, weight: WEIGHT[k], cumle });
+    const tip = over === 0 ? null : ADVICE[k][diff < 0 ? 0 : 1];
+    items.push({ key: k, label: POSTURE_LABEL[k], value: p[k], ref: ref[k], diff, score, weight: WEIGHT[k], cumle, tip });
   }
   if (!items.length) return { total: null, items };
   const wsum = items.reduce((a, i) => a + i.weight, 0);

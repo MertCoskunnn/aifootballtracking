@@ -12,14 +12,15 @@
 // şeyler: iskeletin oturması (buildTrack), topun bulunması ve temas karesinin bulunması (findKicks) —
 // bunlar hâlâ detect.js/pipeline.js'te. classifyView/suggestMode artık modu/açıyı SEÇMİYOR, sadece
 // "seçtiğin açı ile videonun görünüşü uyuşmuyor" diye yumuşak bir uyarı için kullanılıyor (viewWarning).
-import * as pipeline from './pipeline.js?v=40';
-import { measure, measureFreeKick, buildTrack, bodyLeg } from './metrics.js?v=40';
-import { readOutcome, outcomeProblems, describeOutcome, combineOutcomes } from './outcome.js?v=40';
-import { diagnose, unexplainedNote, kaynakMetni } from './sebep.js?v=40';
-import { evaluate } from './coach.js?v=40';
-import { fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=40';
-import { getRuleSet } from './rules.js?v=40';
-import { pickTrackedPerson, pickDisplayBall, nearestBallWidth, personAtPoint } from './display.js?v=40';
+import * as pipeline from './pipeline.js?v=41';
+import { measure, measureFreeKick, buildTrack, bodyLeg } from './metrics.js?v=41';
+import { readOutcome, outcomeProblems, describeOutcome, combineOutcomes } from './outcome.js?v=41';
+import { diagnose, unexplainedNote, kaynakMetni } from './sebep.js?v=41';
+import { evaluate } from './coach.js?v=41';
+import { fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=41';
+import { getRuleSet } from './rules.js?v=41';
+import { pickTrackedPerson, pickDisplayBall, nearestBallWidth, personAtPoint } from './display.js?v=41';
+import { contactPosture, compareToReference, referenceFor } from './metrics3d.js?v=41';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');
@@ -34,6 +35,11 @@ const state = { frames: [], track: null, index: 0, contact: null, ball: null, bu
 
 // Hata ayıklama: tarayıcı konsolundan (ve Frodo'nun doğrulama aracından) durumu okumak için.
 window.__hoca = state;
+
+// 2026-09-25 (Mert): v1'in puanı Messi'nin temas anı postürüne yakınlık. Referans, Messi'nin idman
+// videosundan uygulamanın kendi hattıyla ÖLÇÜLDÜ (tests/postur.html → referans/messi-plase.json).
+let messiRef = null;
+fetch('referans/messi-plase.json?v=41').then((r) => (r.ok ? r.json() : null)).then((j) => { messiRef = j; }).catch(() => {});
 
 function setStatus(t) { $('status').textContent = t; }
 
@@ -473,11 +479,12 @@ $('next').addEventListener('click', () => state.index < state.frames.length - 1 
 const SETUP_HINTS = {
   '': 'Açıyı, vuruş türünü ve ayağı seç. Sonra videoyu yükle: hoca vuruş anını ve topu kendisi bulur, temas karesini istersen elle düzeltebilirsin.',
   shot: 'Çekim: tam yandan, telefon sabit, tüm vücut ve top kadrajda.',
-  placement: 'Çekim: tam yandan, telefon sabit, tüm vücut ve top kadrajda.',
+  placement: 'Çekim: yandan ya da arkadan, telefon sabit, tüm vücut ve top kadrajda. Sol ayak sağ doksana, sağ ayak sol doksana.',
   pass: 'Çekim: tam yandan, telefon sabit, tüm vücut ve top kadrajda.',
   freekick: 'Çekim: arkadan ya da çapraz arkadan, telefon sabit, oyuncu ve top kadrajda.',
 };
 function updateSetupHint() { $('setupHint').textContent = SETUP_HINTS[$('mode').value] || SETUP_HINTS['']; }
+updateSetupHint(); // v1: doksana plase varsayılan seçili, ipucu baştan doğru olsun
 $('mode').addEventListener('change', () => {
   updateSetupHint();
   draw();
@@ -611,6 +618,12 @@ function runAnalysis() {
         : measure(state.track, state.contact, state.ball, foot, pipeline.DENSE_FPS);
       res = evaluate(m, mode, null, ruleSet.kurallar);
     }
+    // Doksana plase (v1'in tek tekniği): puan 2D kurallardan değil, Messi'nin 3D temas postüründen.
+    if (mode === 'placement') {
+      const cmp = placementReport(foot, angle, ruleSet);
+      if (state.activeKick) { state.activeKick.score = cmp?.total ?? null; renderKickList(); }
+      return;
+    }
     if (state.activeKick) { state.activeKick.score = res.total; renderKickList(); }
     // Ürün tanımı (2026-09-24 gece): top ne yaptı → hangi postür hatası bunu açıklıyor → nasıl düzelir.
     ensureFlight();
@@ -621,6 +634,43 @@ function runAnalysis() {
     // referans 9'da arkadan çekimi "yandan" sandı. Güvenilmez bilgiyi göstermek gürültü.
     renderReport(res, mode, foot, ruleSet, null, { outcome, diag, angle });
   } catch (err) { setStatus(err.message); }
+}
+
+// Messi kıyas raporu. 3D noktalar yoksa (MoveNet yedeği ya da temasta iskelet yok) puan verilmez:
+// tahmin edilen bir puan, gösterilmeyen bir puandan kötüdür.
+function placementReport(foot, angle, ruleSet) {
+  const el = $('report');
+  const ref = referenceFor(messiRef, foot);
+  const posture = contactPosture(state.track, state.contact, foot);
+  const head = `<h2>Doksana plase raporu</h2>
+    <p class="hint">Referans: Messi, sol ayakla sağ doksana (idman videosu)${ref?.mirrored ? '. Sağ ayak için aynalandı: hedef sol doksan' : ''}.</p>`;
+  if (!ref || !posture) {
+    el.innerHTML = `${head}<div class="score"><span class="big">—</span></div>
+      <div class="coach">${!ref ? 'Messi referansı yüklenemedi.' : 'Temas anında 3D iskelet çıkmadı, postürü ölçemedim. Tüm vücudun kadrajda olduğu, daha net bir çekimle tekrar dene.'}</div>`;
+    el.hidden = false;
+    return null;
+  }
+  const cmp = compareToReference(posture, ref.posture, 'Messi');
+  const band = (s) => (s >= 80 ? '' : s >= 50 ? 'mid' : 'low');
+  const verdict = cmp.total >= 85 ? 'Messi'nin temas postürüne çok yakın. Bu vuruşu tekrarla.'
+    : cmp.total >= 65 ? 'Fena değil ama Messi'nin postüründen belirgin farkların var.'
+      : 'Kötü vuruş: temas anındaki postürün Messi'ninkinden uzak.';
+  const worst = cmp.items.filter((i) => i.tip && i.score < 85).slice(0, 2);
+  const fmt = (v) => `${Math.round(v)}°`;
+  el.innerHTML = `${head}
+    <div class="score"><span class="big">${cmp.total}</span><span>/ 100</span></div>
+    <div class="coach">${verdict}${worst.length ? '<br><br><b>Odaklan:</b><br>' + worst.map((i) => `${i.cumle}<br><span class="hint">${i.tip}</span>`).join('<br><br>') : ''}</div>
+    ${cmp.items.map((i) => `
+      <div class="metric">
+        <span class="name">${i.label}</span>
+        <span class="val">Sen ${fmt(i.value)} · Messi ${fmt(i.ref)} · ${i.score}</span>
+        <div class="bar"><i class="${band(i.score)}" style="width:${i.score}%"></i></div>
+        ${i.tip ? `<span class="tip">${i.tip}</span>` : ''}
+      </div>`).join('')}
+    <p class="hint">Açılar 3D iskeletten (MediaPipe) ölçülür: yandan ve arkadan çekimde aynı eklem açısı. Sadece vuruş anı postürü puanlanır, koşu ve topun gidişi puana girmez.</p>`;
+  el.hidden = false;
+  el.scrollIntoView({ behavior: 'smooth' });
+  return cmp;
 }
 
 // Topun sonucu birkaç iz penceresinde okunur, sadece tutarlı etiketler kalır (outcome.js

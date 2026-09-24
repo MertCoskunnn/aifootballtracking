@@ -21,7 +21,7 @@ export const PROJECT_ROOT = path.join(SCRIPT_DIR, '..');
 const EXCLUDED_TOP_DIRS = new Set(['tests', 'scripts', 'test-videolar']);
 // Bu klasörlerin TAMAMI (statik taramadan bağımsız) dahil edilir: model dosyaları ve vendor
 // kütüphaneleri import değil, runtime'da new URL(import.meta.url)/FilesetResolver ile çekiliyor.
-const ALWAYS_INCLUDE_DIRS = ['models', 'vendor'];
+const ALWAYS_INCLUDE_DIRS = ['models', 'vendor', 'referans']; // referans/: app.js fetch ile okur (Messi postürü)
 
 const GRAPH_EXTS = new Set(['.js', '.mjs', '.css']); // bu uzantılar için içerik taranıp izlenir
 const EXCLUDED_EXTS = new Set(['.md']);

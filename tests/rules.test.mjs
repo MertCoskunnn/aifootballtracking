@@ -52,16 +52,18 @@ test('getRuleSet: ayak üstü şut (sağ ve sol) yandan ölçülür, referans Ro
   }
 });
 
-test('getRuleSet: plase sol → Messi (kaynaklı, bekleyen not yok), plase sağ → Neymar (bekleyen not var)', () => {
+test('getRuleSet: plase sol → Messi, plase sağ → aynalanmış Messi (2026-09-25, Mert)', () => {
   const left = getRuleSet('placement', 'left', 'side');
   assert.equal(left.olculemez, false);
   assert.equal(left.referans, 'Messi');
-  assert.equal(left.referansNotu.includes(PENDING_MARK), false, 'Messi referansı bekleyen olmamalı, METRICS.mddan geliyor');
+  assert.equal(left.referansNotu.includes(PENDING_MARK), false);
+  assert.match(left.referansNotu, /sağ doksana/);
 
   const right = getRuleSet('placement', 'right', 'side');
   assert.equal(right.olculemez, false);
-  assert.equal(right.referans, 'Neymar');
-  assert.ok(right.referansNotu.includes(PENDING_MARK));
+  assert.equal(right.referans, 'Messi');
+  assert.equal(right.referansNotu.includes(PENDING_MARK), false);
+  assert.match(right.referansNotu, /aynalandı, sol doksana/);
 });
 
 test('getRuleSet: frikik sol → Messi (kaynaklı), frikik sağ → Neymar (bekleyen not var)', () => {

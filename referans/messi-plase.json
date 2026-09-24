@@ -1,0 +1,12 @@
+{
+  "_not": "Messi'nin sol ayakla sağ doksana idman frikiği, temas anı 3D postürü (derece). Uygulamanın kendi hattıyla ölçüldü (tests/postur.html + metrics3d.js#contactPosture, temas ±2 kare medyanı, tekrar eden kareler atıldı). posture = iki vuruşun ortalaması. Sağ ayak için aynalanarak kullanılır (metrics3d.js#referenceFor). Açı tanımları metrics3d.js#posture3d.",
+  "olculdu": "2026-09-25",
+  "video": "Lionel Messi Amazing Freekick Goal in Training _ HD.mp4 (720p, 25 fps, yandan sabit kamera)",
+  "foot": "left",
+  "target": "sağ doksan",
+  "vuruslar": [
+    { "id": "MV1", "temasSn": 6.10, "bulunus": "otomatik", "posture": { "supportKnee": 40.4, "kickKnee": 37.7, "kickHip": 55.2, "trunkLean": 9.1, "trunkSide": -5.9, "armOpen": 18.6 } },
+    { "id": "MV2", "temasSn": 14.40, "bulunus": "elle (hareket bulanıklığı, kare kare gözle doğrulandı)", "posture": { "supportKnee": 24.9, "kickKnee": 38.7, "kickHip": 58.1, "trunkLean": 3.2, "trunkSide": -1.3, "armOpen": 3.8 } }
+  ],
+  "posture": { "supportKnee": 32.7, "kickKnee": 38.2, "kickHip": 56.7, "trunkLean": 6.2, "trunkSide": -3.6, "armOpen": 11.2 }
+}
