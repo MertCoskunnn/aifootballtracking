@@ -83,11 +83,40 @@ function drawLive(frame) {
   drawBalls(frame, s);
 }
 
-function drawBalls(frame, s) {
-  for (const b of frame.balls || []) {
-    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1 * s;
-    ctx.beginPath(); ctx.arc(b.x, b.y, Math.max(4, (b.w || 8) / 2) * s, 0, Math.PI * 2); ctx.stroke();
+// cp-17-nisangah: topu saran işaret artık oyunlardaki crosshair gibi ince bir nişangah — topun
+// GERÇEK tespit boyutuna (b.w) göre ölçeklenen bir çember + dört kısa çentik. Eskiden çember
+// toptan çok büyüktü: sıradan tespitler sabit bir taban yarıçapa yakın çiziliyordu, temas topu
+// ise b.w'den tamamen bağımsız, sabit 14*s piksel yarıçaplıydı (küçük bir topta devasa kalıyordu).
+// Yarıçap artık b.w/2 × 1.15 (topu tam sarıp biraz taşan bir pay) — çizgi kalınlığı hâlâ s ile
+// ölçekleniyor. Temas topu turuncu ve biraz kalın, diğer tespitler soluk beyaz ve ince.
+function drawBallMarker(b, s, isContact) {
+  if (!b) return;
+  const r = Math.max(3, ((b.w || 8) / 2) * 1.15) * s;
+  ctx.strokeStyle = isContact ? '#ffb547' : 'rgba(255,255,255,0.55)';
+  ctx.lineWidth = (isContact ? 2 : 1) * s;
+  ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, Math.PI * 2); ctx.stroke();
+  // dört kısa çentik: çemberin biraz dışından başlayıp dışa doğru kısa bir çizgi
+  const gap = r * 0.25, tick = Math.max(3 * s, r * 0.35);
+  ctx.beginPath();
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    ctx.moveTo(b.x + dx * (r + gap), b.y + dy * (r + gap));
+    ctx.lineTo(b.x + dx * (r + gap + tick), b.y + dy * (r + gap + tick));
   }
+  ctx.stroke();
+}
+
+function drawBalls(frame, s) {
+  for (const b of frame.balls || []) drawBallMarker(b, s, false);
+}
+
+// Temas topu (state.ball) sadece {x,y} taşır, genişliği (w) yok. Nişangahı doğru boyutlandırmak
+// için o karedeki HAM tespitlerden state.ball'a en yakın olanın w'sini ödünç alırız; hiç tespit
+// yoksa (ör. elle işaretlenmiş, top o karede hiç bulunamamış) makul bir varsayılana düşer.
+function nearestBallWidth(frame, point) {
+  const cands = (frame?.balls || []).filter((b) => b.w > 0);
+  if (!cands.length) return 16;
+  const near = cands.reduce((a, b) => (Math.hypot(b.x - point.x, b.y - point.y) < Math.hypot(a.x - point.x, a.y - point.y) ? b : a));
+  return near.w;
 }
 
 // Vuruş bulunamadığında (ya da video çok kısa/otomatik hiçbir şey vermediğinde) elle işaretleme
@@ -277,10 +306,9 @@ function draw() {
   const main = state.track ? state.track[state.index] : null;
   // Oyuncu seçilmeden önce herkes aynı çizilir. Seçildikten sonra oyuncu parlak, diğerleri soluk.
   for (const p of f?.people || []) drawPose(p, s, state.track ? p === main : true);
-  if (f) drawBalls(f, s); // tespit edilen her top ince beyaz çemberle (kalın olan aşağıdaki, temas topu)
+  if (f) drawBalls(f, s); // tespit edilen her top soluk bir nişangahla (temas topu ayrıca aşağıda, turuncu)
   if (state.ball && state.index === state.contact) {
-    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2 * s;
-    ctx.beginPath(); ctx.arc(state.ball.x, state.ball.y, 14 * s, 0, Math.PI * 2); ctx.stroke();
+    drawBallMarker({ x: state.ball.x, y: state.ball.y, w: state.ball.w ?? nearestBallWidth(f, state.ball) }, s, true);
   }
   drawFlight(s);
   if (state.index === state.contact) {
