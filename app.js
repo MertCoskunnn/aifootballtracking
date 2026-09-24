@@ -12,14 +12,14 @@
 // şeyler: iskeletin oturması (buildTrack), topun bulunması ve temas karesinin bulunması (findKicks) —
 // bunlar hâlâ detect.js/pipeline.js'te. classifyView/suggestMode artık modu/açıyı SEÇMİYOR, sadece
 // "seçtiğin açı ile videonun görünüşü uyuşmuyor" diye yumuşak bir uyarı için kullanılıyor (viewWarning).
-import * as pipeline from './pipeline.js?v=39';
-import { measure, measureFreeKick, buildTrack, bodyLeg } from './metrics.js?v=39';
-import { readOutcome, outcomeProblems, describeOutcome } from './outcome.js?v=39';
-import { diagnose, unexplainedNote, kaynakMetni } from './sebep.js?v=39';
-import { evaluate } from './coach.js?v=39';
-import { fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=39';
-import { getRuleSet } from './rules.js?v=39';
-import { pickTrackedPerson, pickDisplayBall, nearestBallWidth, personAtPoint } from './display.js?v=39';
+import * as pipeline from './pipeline.js?v=40';
+import { measure, measureFreeKick, buildTrack, bodyLeg } from './metrics.js?v=40';
+import { readOutcome, outcomeProblems, describeOutcome, combineOutcomes } from './outcome.js?v=40';
+import { diagnose, unexplainedNote, kaynakMetni } from './sebep.js?v=40';
+import { evaluate } from './coach.js?v=40';
+import { fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=40';
+import { getRuleSet } from './rules.js?v=40';
+import { pickTrackedPerson, pickDisplayBall, nearestBallWidth, personAtPoint } from './display.js?v=40';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');
@@ -615,12 +615,27 @@ function runAnalysis() {
     // Ürün tanımı (2026-09-24 gece): top ne yaptı → hangi postür hatası bunu açıklıyor → nasıl düzelir.
     ensureFlight();
     const kicker = state.track?.[state.contact];
-    const outcome = readOutcome(state.fit, angle, kicker ? bodyLeg(kicker) : 0);
+    const outcome = stableOutcome(angle, kicker ? bodyLeg(kicker) : 0);
     const diag = diagnose(res.items, outcomeProblems(outcome, mode), mode);
     // viewWarning (videodan açı tahmini) artık gösterilmiyor: kendi notu "güvenilmez" diyordu ve
     // referans 9'da arkadan çekimi "yandan" sandı. Güvenilmez bilgiyi göstermek gürültü.
     renderReport(res, mode, foot, ruleSet, null, { outcome, diag, angle });
   } catch (err) { setStatus(err.message); }
+}
+
+// Topun sonucu birkaç iz penceresinde okunur, sadece tutarlı etiketler kalır (outcome.js
+// combineOutcomes: düşük çözünürlükte tek pencerenin okuması gürültü çıkabiliyor).
+const OUTCOME_WINDOWS = [0.3, 0.4, 0.6, 0.8, 1.2];
+function stableOutcome(angle, legPx) {
+  if (state.contact === null || !state.ball) return null;
+  const cf = state.frames[state.contact];
+  const anchor = { t: cf?.t ?? 0, x: state.ball.x, y: state.ball.y, w: state.ball.w ?? nearestBallWidth(cf, state.ball) };
+  const reads = OUTCOME_WINDOWS.map((win) => {
+    const cands = collectCandidates(state.frames, state.contact, win, { contactAnchor: state.ball });
+    cands.push({ ...anchor });
+    return readOutcome(fitFlight(cands, anchor.t), angle, legPx);
+  });
+  return combineOutcomes(reads);
 }
 
 // cp-16-kural-matrisi: (mod, ayak, açı) kombinasyonu hiç ölçülemiyorsa (ör. frikik yandan çekilmiş)

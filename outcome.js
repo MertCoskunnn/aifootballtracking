@@ -74,6 +74,41 @@ export function readOutcome(fit, angle, legPx) {
 }
 
 /**
+ * Kararlılık kontrolü (2026-09-24 gece). Referans 9'da aynı veride iz penceresi 0.3/0.4/0.6/1.2 sn
+ * seçilince okuma "sağa+falso / düz+falsosuz / sağa+falso / sola+falso" diye değişti: düşük
+ * çözünürlükte 4-6 top tespitinden eğrilik ve yön gürültü. Emin olmadığımız şeyi kesin gibi
+ * söylemek ("top kıvrıldı, çünkü...") tam kaçındığımız şey. Bu yüzden sonuç birkaç pencerede
+ * okunur; bir etiket ancak okunabilen pencerelerin en az %80'inde aynıysa kabul edilir.
+ * outcomes: readOutcome sonuçları (null olabilir). Dönen: birleşik sonuç ya da hepsi belirsizse null.
+ */
+export function combineOutcomes(outcomes, minAgree = 0.8, minCount = 3) {
+  const list = (outcomes || []).filter(Boolean);
+  if (!list.length) return null;
+  const pick = (field) => {
+    const vals = list.map((o) => o[field]).filter((v) => v !== null && v !== undefined);
+    if (vals.length < minCount) return null;
+    const counts = new Map();
+    for (const v of vals) counts.set(v, (counts.get(v) || 0) + 1);
+    const [best, n] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+    return n / vals.length >= minAgree ? best : null;
+  };
+  const median = (arr) => { const s = arr.filter(Number.isFinite).sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : null; };
+  const out = {
+    angle: list[0].angle,
+    depth: pick('depth'),
+    height: pick('height'),
+    speedLabel: pick('speedLabel'),
+    direction: pick('direction'),
+    curve: pick('curve'),
+  };
+  out.launchDeg = out.height ? median(list.filter((o) => o.height === out.height).map((o) => o.launchDeg)) : null;
+  out.speed = out.speedLabel ? median(list.filter((o) => o.speedLabel === out.speedLabel).map((o) => o.speed)) : null;
+  out.sideDeg = out.direction ? median(list.filter((o) => o.direction === out.direction).map((o) => o.sideDeg)) : null;
+  const any = ['depth', 'height', 'speedLabel', 'direction', 'curve'].some((k) => out[k] !== null);
+  return any ? out : null;
+}
+
+/**
  * Sonuçtan "sorun" etiketleri çıkarır: teşhis motoru (sebep.js) bu etiketleri açıklayan postür
  * hatasını arar. Hangi sonucun sorun olduğu vuruş türüne bağlı: frikikte havalanma istenir,
  * şutta/pasta istenmez; frikikte falso istenir. Yön (sol/sağ) sorun sayılmaz: hedef bilinmiyor.

@@ -119,3 +119,18 @@ test('readOutcome yandan: top kameradan uzaklaşıyorsa (küçülüyor) yüksekl
   assert.deepEqual([...outcomeProblems(o, 'shot')], [], 'okunamayan sonuçtan sorun çıkmaz');
   assert.match(describeOutcome(o), /kameradan uzaklaşarak gitti/);
 });
+
+test('combineOutcomes: pencereler çelişiyorsa etiket düşer, tutarlıysa kalır', async () => {
+  const { combineOutcomes } = await import('../outcome.js');
+  const o = (direction, curve) => ({ angle: 'behind', depth: 'uzaklaşıyor', height: null, speedLabel: null, direction, curve, sideDeg: direction === 'sağ' ? 15 : direction === 'sol' ? -15 : 0 });
+  // Referans 9'daki gerçek durum: sağ/düz/sağ/sol, falso var/yok/var/var
+  const noisy = combineOutcomes([o('sağ', 'var'), o('düz', 'yok'), o('sağ', 'var'), o('sol', 'var')]);
+  assert.equal(noisy.direction, null);
+  assert.equal(noisy.curve, null);
+  assert.equal(noisy.depth, 'uzaklaşıyor');
+  const steady = combineOutcomes([o('sağ', 'var'), o('sağ', 'var'), o('sağ', 'var'), o('sağ', 'yok'), o('sağ', 'var')]);
+  assert.equal(steady.direction, 'sağ');
+  assert.equal(steady.curve, 'var');
+  assert.equal(combineOutcomes([null, null]), null);
+  assert.equal(combineOutcomes([o('sağ', 'var'), o('sağ', 'var')]), null, 'en az 3 okuma gerekir');
+});

@@ -1,7 +1,7 @@
 // Ölçüm katmanı ("cetvel"): iskelet noktalarından açı ve mesafe hesaplar.
 // Saf fonksiyonlar, tarayıcıya ve MediaPipe'a bağımlı değil, test edilebilir.
 // Koordinatlar piksel cinsinden, y aşağı doğru artar.
-import { findPhases } from './phases.js?v=39';
+import { findPhases } from './phases.js?v=40';
 
 // MediaPipe Pose nokta numaraları
 export const LM = {
