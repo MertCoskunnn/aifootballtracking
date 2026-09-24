@@ -7,9 +7,10 @@
 // tarayıcıda çalışan regresyon kontrol sayfası (tests/regresyon.html) AYNI kodu çalıştırmalı,
 // yoksa "Messi hâlâ 100 mü" kontrolü sadece burada doğru, orada yanlış olabilir. Bu dosyada artık
 // sadece arayüz ve akış var; tarama adımlarının kendisi pipeline.js'te.
-import * as pipeline from './pipeline.js?v=23';
-import { measure, measureFreeKick, buildTrack } from './metrics.js?v=23';
-import { evaluate } from './coach.js?v=23';
+import * as pipeline from './pipeline.js?v=25';
+import { measure, measureFreeKick, buildTrack } from './metrics.js?v=25';
+import { evaluate } from './coach.js?v=25';
+import { ballFlight } from './trajectory.js?v=25';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');
@@ -276,10 +277,38 @@ function draw() {
     ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2 * s;
     ctx.beginPath(); ctx.arc(state.ball.x, state.ball.y, 14 * s, 0, Math.PI * 2); ctx.stroke();
   }
+  drawFlight(s);
   if (state.index === state.contact) {
     ctx.fillStyle = '#ffb547'; ctx.font = `bold ${14 * s}px system-ui`;
     ctx.fillText('TEMAS', 10 * s, 22 * s);
   }
+}
+
+// Şut çizgisi: temastan sonra topun izlediği yol, o ana kadar olan kısmı (oyunlardaki gibi).
+// Yol temas/top değişince bir kez hesaplanır, oynatırken sadece çizilir.
+function drawFlight(s) {
+  if (state.contact === null || !state.ball || state.index <= state.contact) return;
+  const key = `${state.contact}:${state.ball.x}:${state.ball.y}:${state.frames.length}`;
+  if (state.flightKey !== key) {
+    state.flight = ballFlight(state.frames, state.contact, state.ball, canvas.width * 0.12);
+    state.flightKey = key;
+  }
+  const pts = state.flight.filter((p) => p.i <= state.index);
+  if (pts.length < 2) return;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  // Önce geniş yarı saydam parıltı, sonra ince parlak çekirdek
+  for (const [w, color, a] of [[10, '#ffb547', 0.25], [3, '#fff3d6', 1]]) {
+    ctx.globalAlpha = a; ctx.strokeStyle = color; ctx.lineWidth = w * s;
+    ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+    // Noktalar arası yumuşak eğri (orta noktalardan geçen ikinci derece Bezier)
+    for (let k = 1; k < pts.length - 1; k++) {
+      const mx = (pts[k].x + pts[k + 1].x) / 2, my = (pts[k].y + pts[k + 1].y) / 2;
+      ctx.quadraticCurveTo(pts[k].x, pts[k].y, mx, my);
+    }
+    ctx.lineTo(pts.at(-1).x, pts.at(-1).y);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
 }
 
 function updateReady() {
