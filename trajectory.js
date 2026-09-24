@@ -46,7 +46,19 @@ export function ballFlight(frames, contact, start, maxStep) {
 // gerçek top konumu. Son ağırlıklı uydurmada bu noktayı bu kadar kat ağırlıkla "sabitliyoruz" —
 // tam bir katı kısıt değil (tek kötü kareden gelen küçük gürültüye karşı dayanıklı kalsın diye),
 // ama eğrinin başlangıcı neredeyse hep temas noktasından geçsin diye baskın.
-const ANCHOR_WEIGHT = 10;
+// cp-21-lag-incelemesi: bug raporunda "nişangah gerçek topun ~40-50px gerisinde kalıyor" şüphesi bu
+// ağırlığa bağlandı. Sentetik testle ölçüldü (bkz. tests/trajectory.test.mjs "ANCHOR_WEIGHT lag
+// incelemesi"): ağırlık 10'dan 1'e kadar değiştirilince ölçülen sapma pratikte DEĞİŞMİYOR (fark
+// <1px) — çünkü ağırlık yalnız 4+ FARKLI τ'lu nokta varken (aşırı-belirlenmiş sistem) devreye
+// giriyor; asıl büyük sapma (100+ px) az/erken veriyle UZAĞA ekstrapole etmekten kaynaklanıyordu
+// (bkz. maxExtendSec, aşağıda ayrı düzeltildi). Yine de ölçülü bir önlem olarak biraz düşürüldü —
+// tek kötü kareye karşı hâlâ baskın (4 kat), ama eskisi kadar aşırı değil.
+const ANCHOR_WEIGHT = 4;
+
+// cp-21-asiri-ekstrapolasyon: fit'in dataSpan'ine (tEnd-contactT) göre izin verilen ekstrapolasyon
+// tavanı — bkz. fitFlight sonundaki maxExtendSec hesaplaması.
+const MIN_EXTEND_SEC = 0.2;
+const MAX_EXTEND_SEC = 0.5;
 
 // RANSAC inlier eşiği topun çapına (w) göre ölçeklenir: küçük/uzak topta dar tolerans,
 // büyük/yakın topta geniş tolerans. w bilinmiyorsa makul bir varsayılana düşer.
@@ -222,8 +234,9 @@ export function fitFlight(points, contactT, opts = {}) {
   inlierSet.add(anchorIdx); // temas noktası her zaman içeride
   const idxs = [...inlierSet];
 
+  const anchorWeight = opts.anchorWeight ?? ANCHOR_WEIGHT;
   const taus = idxs.map((i) => pts[i].tau);
-  const weights = idxs.map((i) => (i === anchorIdx ? ANCHOR_WEIGHT : 1));
+  const weights = idxs.map((i) => (i === anchorIdx ? anchorWeight : 1));
   const fx = quadFit(taus, idxs.map((i) => pts[i].x), weights);
   const fy = quadFit(taus, idxs.map((i) => pts[i].y), weights);
   if (!fx || !fy) return null;
@@ -247,10 +260,24 @@ export function fitFlight(points, contactT, opts = {}) {
   const startDy = fy[1] * minStartSec + fy[2] * minStartSec * minStartSec;
   if (Math.hypot(startDx, startDy) < minStartFactor * ballW) return null;
 
+  // cp-21-asiri-ekstrapolasyon: temastan hemen sonra top birkaç kare içinde kadraj dışına
+  // çıkarsa (ör. çok hızlı şut) gerçek veri penceresi (dataSpan = tEnd-contactT) çok kısa kalabilir
+  // — ikinci derece eğriyi bu kısa pencereden SABİT extendSec (varsayılan 0.5sn) kadar ileri
+  // ekstrapole etmek, veri penceresinin 5-10 katı bir süreye uzanabiliyor; hata τ² ile büyüdüğü
+  // için bu, nişangahı gerçek topun onlarca piksel gerisinde/ilerisinde bırakabiliyor (bkz. bug
+  // raporu: t=6.30/6.40'ta ~40-50px sapma). Güvenli ekstrapolasyon süresini veri penceresiyle
+  // orantılı tutuyoruz: en fazla o kadar (dataSpan), ama en az MIN_EXTEND_SEC (tek/az noktalı kısa
+  // pencerede bile bir miktar akıcılık kalsın), en çok da MAX_EXTEND_SEC (iyi desteklenen eğride
+  // eski davranışla aynı). flightTrail/flightPath/display.js#pickDisplayBall bunu extendSec
+  // TAVANI olarak kullanır (Math.min(istenen, fit.maxExtendSec)).
+  const dataSpan = tEnd - contactT;
+  const maxExtendSec = Math.min(MAX_EXTEND_SEC, Math.max(MIN_EXTEND_SEC, dataSpan));
+
   return {
     coef: { x0: fx[0], vx: fx[1], ax: fx[2], y0: fy[0], vy: fy[1], ay: fy[2] },
     contactT,
     tEnd,
+    maxExtendSec,
     inliers: idxs.map((i) => ({ t: pts[i].t, x: pts[i].x, y: pts[i].y })),
     rmsPx,
   };
@@ -266,11 +293,14 @@ export function flightAt(fit, t) {
 /**
  * Animasyonun o anki kuyruğu: [{x,y,alpha,width}], kuyruk ucu (en eski) alpha≈0/ince,
  * baş (en yeni, tNow) alpha=1/kalın. tNow temas anından önceyse [] döner. Top kadrajdan
- * çıktıysa (tNow, fit.tEnd'i aştıysa) en fazla extendSec kadar ileri ekstrapole edilir.
+ * çıktıysa (tNow, fit.tEnd'i aştıysa) en fazla extendSec kadar ileri ekstrapole edilir —
+ * ama hiçbir zaman fit.maxExtendSec'i aşmaz (cp-21: az veriyle desteklenen kısa bir eğriyi
+ * uzun süre ekstrapole etmek büyük sapmaya yol açabiliyor, bkz. fitFlight#maxExtendSec).
  */
 export function flightTrail(fit, tNow, { extendSec = 0.5, tailSec = 0.35, samples = 24 } = {}) {
   if (!fit || tNow <= fit.contactT) return [];
-  const end = Math.min(tNow, fit.tEnd + extendSec);
+  const safeExtendSec = Math.min(extendSec, fit.maxExtendSec ?? extendSec);
+  const end = Math.min(tNow, fit.tEnd + safeExtendSec);
   if (end <= fit.contactT) return [];
   const start = Math.max(fit.contactT, end - tailSec);
   const n = Math.max(2, samples);

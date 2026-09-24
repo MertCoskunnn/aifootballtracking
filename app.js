@@ -95,14 +95,22 @@ function drawLive(frame) {
 // ise b.w'den tamamen bağımsız, sabit 14*s piksel yarıçaplıydı (küçük bir topta devasa kalıyordu).
 // Yarıçap artık b.w/2 × 1.15 (topu tam sarıp biraz taşan bir pay) — çizgi kalınlığı hâlâ s ile
 // ölçekleniyor. Temas topu turuncu ve biraz kalın, diğer tespitler soluk beyaz ve ince.
+// cp-21-nisangah-buyuklugu bug düzeltmesi: r'ye YANLIŞLIKLA `* s` uygulanıyordu — b.x/b.y/b.w zaten
+// canvas'la AYNI gerçek piksel uzayında (canvas.width = video.videoWidth, s = canvas.width/400 SADECE
+// çizgi kalınlığı için bir ölçek, yukarıdaki yorum da bunu söylüyor). r'yi de s ile çarpmak onu
+// 1280 genişlikte ~3.2 kat şişiriyordu (top çapının kat kat üstünde bir çember — gerçek bug raporu).
+// Kanıt: bu fonksiyonun kendi yorumu "çizgi kalınlığı hâlâ s ile ölçekleniyor" diyor, r için böyle
+// bir şey söylemiyor; kod ile yorum çelişiyordu. r artık SADECE b.w'ye bağlı (s'siz).
 function drawBallMarker(b, s, isContact) {
   if (!b) return;
-  const r = Math.max(3, ((b.w || 8) / 2) * 1.15) * s;
+  const r = Math.max(3, ((b.w || 8) / 2) * 1.15);
   ctx.strokeStyle = isContact ? '#ffb547' : 'rgba(255,255,255,0.55)';
   ctx.lineWidth = (isContact ? 2 : 1) * s;
   ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, Math.PI * 2); ctx.stroke();
-  // dört kısa çentik: çemberin biraz dışından başlayıp dışa doğru kısa bir çizgi
-  const gap = r * 0.25, tick = Math.max(3 * s, r * 0.35);
+  // dört kısa çentik: çemberin biraz dışından başlayıp dışa doğru kısa bir çizgi. Uzunluk YARIÇAPLA
+  // orantılı (r*0.35) — eskiden 3*s tabanı vardı, r artık küçüldüğü için o taban çentiği r'den daha
+  // uzun/orantısız yapardı; taban artık s'den bağımsız, küçük bir mutlak piksel (2).
+  const gap = r * 0.25, tick = Math.max(2, r * 0.35);
   ctx.beginPath();
   for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
     ctx.moveTo(b.x + dx * (r + gap), b.y + dy * (r + gap));

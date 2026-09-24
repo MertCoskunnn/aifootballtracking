@@ -23,9 +23,11 @@ import { flightAt } from './trajectory.js?v=28';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const FEET = [27, 28, 31, 32]; // ayak bileği (sol/sağ), ayak ucu (sol/sağ)
-// fit'in son güvenilir noktasından (tEnd) sonra ne kadar ileri ekstrapole edilebileceği (saniye).
-// trajectory.js#flightTrail'in varsayılan extendSec'iyle aynı: topun kadraj dışına kısa bir süre
-// daha "uçmaya devam ediyormuş" gibi görünmesi doğal, ama sınırsız ekstrapolasyon saçmalar.
+// fit'in son güvenilir noktasından (tEnd) sonra ne kadar ileri ekstrapole edilebileceğinin TAVANI
+// (saniye). trajectory.js#flightTrail'in varsayılan extendSec'iyle aynı: topun kadraj dışına kısa
+// bir süre daha "uçmaya devam ediyormuş" gibi görünmesi doğal, ama sınırsız ekstrapolasyon saçmalar.
+// cp-21-lag-fix: gerçek tavan bundan da küçük olabilir — bkz. fit.maxExtendSec (trajectory.js),
+// veri penceresi (tEnd-contactT) kısaysa bu sabitten daha kısıtlı bir ekstrapolasyona izin verir.
 const FIT_EXTEND_SEC = 0.5;
 
 /**
@@ -66,7 +68,8 @@ export function pickDisplayBall(frame, index, contact, ballAnchor, t, fit) {
   }
   if (index > contact) {
     if (!fit) return null; // cp-20: fit yoksa temas sonrası nişangah çizilmez, eski yedeğe düşülmez
-    const clampedT = Math.min(t, fit.tEnd + FIT_EXTEND_SEC);
+    const safeExtendSec = Math.min(FIT_EXTEND_SEC, fit.maxExtendSec ?? FIT_EXTEND_SEC);
+    const clampedT = Math.min(t, fit.tEnd + safeExtendSec);
     const { x, y } = flightAt(fit, clampedT);
     // cp-20-nisangah-boyutu bug düzeltmesi: genişlik eskiden HER ZAMAN ankor'a (temas anındaki
     // ESKİ konuma) en yakın ham tespitten ödünç alınıyordu — ama top uçtukça bu konumdan çok

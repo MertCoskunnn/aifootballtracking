@@ -177,3 +177,75 @@ test('fitFlight+collectCandidates: sahada duran ikinci top varken asla o topu se
   }
   // fit null da olabilir (veri yetersizse) — ama ASLA decoy'u seçmemeli, üstteki assert'ler bunu garanti eder.
 });
+
+// --- cp-21: tarayıcı doğrulaması bug raporu — nişangah/iz gerçek topun ~40-50px gerisinde kalıyor ---
+// İki şüpheli: ANCHOR_WEIGHT (temas noktasını fazla bağlıyor) ve aşırı ekstrapolasyon (az veriyle
+// desteklenen kısa bir eğriyi uzun süre ileri götürmek). Sentetik ölçümle ayrıştırıldı.
+
+test('fitFlight: ANCHOR_WEIGHT (opts.anchorWeight) lag üzerinde ÖLÇÜLEBİLİR bir etki YARATMIYOR (4+ nokta varken ağırlık sadece aşırı-belirlenmiş sistemde devreye girer)', () => {
+  const contactT = 6.10;
+  const trueCoef = { x0: 640, vx: 900, ax: -30, y0: 400, vy: -700, ay: 900 }; // 1280 ölçekte hızlı şut
+  const trueAt = (tau) => ({ x: trueCoef.x0 + trueCoef.vx * tau + trueCoef.ax * tau * tau, y: trueCoef.y0 + trueCoef.vy * tau + trueCoef.ay * tau * tau });
+  // gerçekçi "bulanık iz" önyargısı: tespit, hız yönünün TERSİNE (gerideki), hızla orantılı kaymış
+  const biased = (tau) => {
+    const p = trueAt(tau);
+    const vxNow = trueCoef.vx + 2 * trueCoef.ax * tau, vyNow = trueCoef.vy + 2 * trueCoef.ay * tau;
+    return { x: p.x - vxNow * 0.012, y: p.y - vyNow * 0.012 };
+  };
+  const taus = [0.08, 0.16, 0.24];
+  const results = [10, 4, 1].map((anchorWeight) => {
+    const pts = [{ t: contactT, x: trueCoef.x0, y: trueCoef.y0, w: 16 }];
+    for (const tau of taus) { const b = biased(tau); pts.push({ t: contactT + tau, x: b.x, y: b.y, w: 16 }); }
+    const fit = fitFlight(pts, contactT, { anchorWeight });
+    assert.ok(fit);
+    const got = flightAt(fit, contactT + 0.2);
+    const want = trueAt(0.2);
+    return Math.hypot(got.x - want.x, got.y - want.y);
+  });
+  // en yüksek ve en düşük ağırlık arasındaki fark birkaç pikselden fazla olmamalı — asıl kaynak
+  // BAŞKA bir yerde (bkz. aşağıdaki maxExtendSec testi), ağırlık tek başına 40-50px'lik bir sapma
+  // YARATAMAZ; bunu ölçüp kanıtlıyoruz ki ileride biri "ağırlığı düşürürsek düzelir" sanmasın.
+  const spread = Math.max(...results) - Math.min(...results);
+  assert.ok(spread < 5, `ANCHOR_WEIGHT'in lag'e etkisi küçük olmalı (ölçülen fark: ${spread.toFixed(2)}px, değerler: ${results.map((r) => r.toFixed(1))})`);
+});
+
+test('fitFlight+flightTrail: az veriyle (kısa dataSpan) desteklenen eğri artık SABİT 0.5sn değil, dataSpan\'e orantılı (ve tavanlı) bir süre ekstrapole edilir', () => {
+  const contactT = 6.10;
+  const trueCoef = { x0: 640, vx: 900, ax: -30, y0: 400, vy: -700, ay: 900 };
+  const trueAt = (tau) => ({ x: trueCoef.x0 + trueCoef.vx * tau + trueCoef.ax * tau * tau, y: trueCoef.y0 + trueCoef.vy * tau + trueCoef.ay * tau * tau });
+  // Temastan hemen sonra sadece 2 gerçek tespit, ikisi de çok erken (tau 0.04-0.08) — top hızla
+  // kadraj dışına çıkmış/izlenememiş gibi. dataSpan çok kısa (~0.08sn) kalıyor. Gerçekçi olsun diye
+  // küçük bir tespit gürültüsü/önyargısı eklendi (25 fps'te piksel-tam tespit beklenmez) — noiseless
+  // (kusursuz) veriyle 3 nokta zaten TAM eğriyi verir, ekstrapolasyon riskini göstermez.
+  const pts = [{ t: contactT, x: trueCoef.x0, y: trueCoef.y0, w: 16 }];
+  for (const tau of [0.04, 0.08]) {
+    const p = trueAt(tau);
+    pts.push({ t: contactT + tau, x: p.x - 3, y: p.y + 2, w: 16 }); // birkaç piksellik gerçekçi sapma
+  }
+  const fit = fitFlight(pts, contactT);
+  assert.ok(fit);
+  const dataSpan = fit.tEnd - fit.contactT;
+  assert.ok(dataSpan < 0.15, `test öncülü: dataSpan kısa olmalı (${dataSpan})`);
+  assert.ok(fit.maxExtendSec < 0.5, `az veriyle desteklenen eğride maxExtendSec varsayılan 0.5sn'den küçük olmalı (${fit.maxExtendSec})`);
+
+  // t=6.40 (tau=0.30) sorgusu: eski (sabit 0.5sn) tavanla fit.tEnd+0.5=6.68 içinde kaldığı için HİÇ
+  // kırpılmadan, gürültülü/az-desteklenen ivme katsayılarıyla tam 0.30sn ileri ekstrapole edilirdi —
+  // hata τ² ile büyüdüğü için bu büyük sapmaya yol açar. Yeni tavan (fit.maxExtendSec) daha erken
+  // devreye girip trail'i fit.tEnd+maxExtendSec'te dondurur; GERÇEK top konumuna (o an ekranda
+  // görünen) göre ölçülen sapma yeni davranışta daha küçük (ya da eşit) kalmalı.
+  const queryT = contactT + 0.30;
+  const trail = flightTrail(fit, queryT, { extendSec: 0.5 });
+  assert.ok(trail.length > 0);
+  const head = trail.at(-1);
+  const newCapT = Math.min(queryT, fit.tEnd + fit.maxExtendSec);
+  const expected = flightAt(fit, newCapT);
+  assert.ok(Math.abs(head.x - expected.x) < 1e-6 && Math.abs(head.y - expected.y) < 1e-6,
+    'trail başı fit.maxExtendSec ile kırpılmış zamana denk gelmeli, ham istenen zamana değil');
+
+  const oldCapT = Math.min(queryT, fit.tEnd + 0.5); // eski, sabit tavanlı davranış
+  const oldPos = flightAt(fit, oldCapT);
+  const truePos = trueAt(queryT - contactT);
+  const newLag = Math.hypot(head.x - truePos.x, head.y - truePos.y);
+  const oldLag = Math.hypot(oldPos.x - truePos.x, oldPos.y - truePos.y);
+  assert.ok(newLag <= oldLag + 1e-6, `yeni tavan eski sabit tavandan daha az (ya da eşit) sapmalı (yeni ${newLag.toFixed(1)}px, eski ${oldLag.toFixed(1)}px)`);
+});
