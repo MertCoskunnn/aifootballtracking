@@ -3,8 +3,8 @@
 // Kullanım: tests/postur.html?video=<test-videolar altındaki dosya>&foot=left|right&auto=1
 // Amaç: Messi'nin referans postürünü (referans/messi-plase.json) ÖLÇEREK üretmek, sonra başka
 // videoları bu referansa göre puanlamak. Sonuç window.__postur'da (makine okunur).
-import * as pipeline from '../pipeline.js?v=44';
-import { contactPosture, posture3d, compareToReference, POSTURE_KEYS } from '../metrics3d.js?v=44';
+import * as pipeline from '../pipeline.js?v=46';
+import { contactPosture, posture3d, compareToReference, POSTURE_KEYS } from '../metrics3d.js?v=46';
 
 const params = new URLSearchParams(location.search);
 const FILE = params.get('video');

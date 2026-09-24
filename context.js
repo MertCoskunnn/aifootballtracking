@@ -4,7 +4,7 @@
 // üçüncü parametre olarak alır (cp-13-vurus-turleri, GECE-PLANI.md).
 //
 // Saf fonksiyon: DOM'a, MediaPipe'a bağımlı değil, Node ile test edilir (detect.js gibi).
-import { trackBalls, fillGaps } from './detect.js?v=44';
+import { trackBalls, fillGaps } from './detect.js?v=46';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 

@@ -12,15 +12,15 @@
 // şeyler: iskeletin oturması (buildTrack), topun bulunması ve temas karesinin bulunması (findKicks) —
 // bunlar hâlâ detect.js/pipeline.js'te. classifyView/suggestMode artık modu/açıyı SEÇMİYOR, sadece
 // "seçtiğin açı ile videonun görünüşü uyuşmuyor" diye yumuşak bir uyarı için kullanılıyor (viewWarning).
-import * as pipeline from './pipeline.js?v=44';
-import { measure, measureFreeKick, buildTrack, bodyLeg } from './metrics.js?v=44';
-import { readOutcome, outcomeProblems, describeOutcome, combineOutcomes } from './outcome.js?v=44';
-import { diagnose, unexplainedNote, kaynakMetni } from './sebep.js?v=44';
-import { evaluate } from './coach.js?v=44';
-import { fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=44';
-import { getRuleSet } from './rules.js?v=44';
-import { pickTrackedPerson, pickDisplayBall, nearestBallWidth, personAtPoint } from './display.js?v=44';
-import { contactPosture, compareToReference, referenceFor } from './metrics3d.js?v=44';
+import * as pipeline from './pipeline.js?v=46';
+import { measure, measureFreeKick, buildTrack, bodyLeg } from './metrics.js?v=46';
+import { readOutcome, outcomeProblems, describeOutcome, combineOutcomes } from './outcome.js?v=46';
+import { diagnose, unexplainedNote, kaynakMetni } from './sebep.js?v=46';
+import { evaluate } from './coach.js?v=46';
+import { fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=46';
+import { getRuleSet } from './rules.js?v=46';
+import { pickTrackedPerson, pickDisplayBall, nearestBallWidth, personAtPoint } from './display.js?v=46';
+import { contactPosture, compareToReference, referenceFor } from './metrics3d.js?v=46';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');
@@ -40,7 +40,7 @@ window.__hoca = state;
 // videosundan uygulamanın kendi hattıyla ÖLÇÜLDÜ (tests/postur.html → referans/messi-plase.json).
 // undefined = henüz yükleniyor, null = yüklenemedi. Analiz yükleme bitmeden gelirse bekleyip tekrar çalışır.
 let messiRef;
-const messiRefReady = fetch('referans/messi-plase.json?v=44').then((r) => (r.ok ? r.json() : null)).catch(() => null)
+const messiRefReady = fetch('referans/messi-plase.json?v=46').then((r) => (r.ok ? r.json() : null)).catch(() => null)
   .then((j) => { messiRef = j; });
 
 function setStatus(t) { $('status').textContent = t; }
@@ -62,7 +62,7 @@ function seek(t) {
 // Tarama (scanVideo) kendi Durdur butonunu ayrıca yönetir.
 function setBusy(b) {
   state.busy = b;
-  for (const id of ['prev', 'next', 'play', 'scrub', 'markContact', 'file', 'mode', 'foot', 'view']) $(id).disabled = b;
+  for (const id of ['prev', 'next', 'play', 'scrub', 'markContact', 'file', 'mode', 'foot']) $(id).disabled = b;
   $('progress').hidden = !b;
   $('stopBtn').hidden = !b;
   $('stageWrap').classList.toggle('busy', b);
@@ -426,7 +426,7 @@ function drawFlight(s) {
 
 // cp-15-secmeli-menu: "Hoca, analiz et" üçü de (açı, vuruş türü, ayak) seçilmeden pasif kalır.
 function updateReady() {
-  const ready = state.contact !== null && !!state.ball && !!$('mode').value && !!$('foot').value && !!$('view').value;
+  const ready = state.contact !== null && !!state.ball && !!$('mode').value && !!$('foot').value;
   $('analyze').disabled = !ready;
   $('ballLabel').textContent = state.ball ? 'top işaretlendi ✓' : 'top işaretlenmedi';
 }
@@ -435,7 +435,9 @@ function updateReady() {
 
 function effectiveMode() { return $('mode').value; }
 function effectiveFoot() { return $('foot').value; }
-function effectiveView() { return $('view').value; }
+// v1 · Messi Doksan (2026-09-25, Mert ile): açı sorusu kalktı. Puan 3D eklem açılarından geliyor,
+// kamera yandan da arkadan da olsa aynı. İç akış (getRuleSet) bir açı beklediği için sabit 'side'.
+function effectiveView() { return 'side'; }
 
 // Kullanıcının SEÇTİĞİ açı, algoritmanın videodan tahmin ettiği kamera açısıyla (classifyView)
 // uyuşmuyorsa yumuşak bir uyarı döner. Bu açı tespiti güvenilmez (bkz. METRICS.md "açık kalanlar"),
@@ -479,9 +481,9 @@ $('next').addEventListener('click', () => state.index < state.frames.length - 1 
 
 // Kamera kurulumu moda göre değişir (RESEARCH.md bölüm 3-4). Hiçbiri seçilmemişken genel bir ipucu gösterilir.
 const SETUP_HINTS = {
-  '': 'Açıyı, vuruş türünü ve ayağı seç. Sonra videoyu yükle: hoca vuruş anını ve topu kendisi bulur, temas karesini istersen elle düzeltebilirsin.',
+  '': 'Vuruş türünü ve ayağı seç. Sonra videoyu yükle: hoca vuruş anını ve topu kendisi bulur, temas karesini istersen elle düzeltebilirsin.',
   shot: 'Çekim: tam yandan, telefon sabit, tüm vücut ve top kadrajda.',
-  placement: 'Çekim: yandan ya da arkadan, telefon düz ve sabit (eğik tutma, gövde açıları kayar), tüm vücut ve top kadrajda. Sol ayak sağ doksana, sağ ayak sol doksana.',
+  placement: 'Çekim: yandan, arkadan ya da çapraz, fark etmez. Telefon düz ve sabit (eğik tutma, gövde açıları kayar), tüm vücut ve top kadrajda. Sol ayak sağ doksana, sağ ayak sol doksana.',
   pass: 'Çekim: tam yandan, telefon sabit, tüm vücut ve top kadrajda.',
   freekick: 'Çekim: arkadan ya da çapraz arkadan, telefon sabit, oyuncu ve top kadrajda.',
 };
@@ -494,7 +496,6 @@ $('mode').addEventListener('change', () => {
   runAnalysis(); // mod değişince mevcut temas/topla yeniden analiz et (üçü de seçiliyse)
 });
 $('foot').addEventListener('change', () => { draw(); updateReady(); runAnalysis(); });
-$('view').addEventListener('change', () => { updateReady(); runAnalysis(); });
 
 document.addEventListener('keydown', (e) => {
   if (state.busy || $('stageWrap').hidden) return;
@@ -578,8 +579,6 @@ function renderKickList() {
   $('kickRows').innerHTML = state.kicks.map((k, i) => `
     <div class="kickRow ${state.activeKick === k ? 'active' : ''}" data-i="${i}">
       <span class="kt">${fmtTime(k.t)}</span>
-      <span class="kf">${FOOT_LABEL[k.foot]}</span>
-      <span class="kv" title="${k.view.reason}">${VIEW_LABEL[k.view.view]}</span>
       <span class="ks">${k.score !== null ? k.score : '—'}</span>
     </div>`).join('');
   for (const row of wrap.querySelectorAll('.kickRow')) {
