@@ -38,3 +38,22 @@
 ## Sabah eki (Mert'in denemesi)
 - **Yeni hata:** arada bir bulutların orada iskelet beliriyor. Muhtemel sebep: nesne modeli bulutu kişi sanıyor, MoveNet yedeği kabul ediyor. Çözüm planı: anatomi + zemin hizası + süreklilik kontrolü, eşikler 0.5/0.45. Hangi video/saniye olduğu bekleniyor.
 - Sıra: bulut iskeleti → açı tespiti v2 → vuruş bulma → hız → 60 fps.
+
+## 2026-09-24 gündüz raporu (Frodo, doğrulama tarayıcıda Messi antrenman klibiyle)
+| İş | Durum |
+|---|---|
+| Messi "önden" gerilemesi (9aaab8f) | ✅ Yandan/Şut/100 geri geldi |
+| Seçmeli menü, otomatik mod yok (cp-15) | ✅ tarayıcıda çalışıyor |
+| Kural matrisi rules.js (cp-16), referans satırı raporda | ✅ Messi hâlâ 100 |
+| Tek oyuncu / tek top (cp-18) | ✅ kaleciye iskelet yok |
+| Nişangah top boyutunda (b0d108b) | ✅ |
+| Şut izi, fizik eğrisi + animasyon (cp-19, a8f1fef, b0d108b) | ⚠️ yerdeki topa artık atlamıyor, yön doğru; iz başı uçan topun ~60 px gerisinde |
+| Kalite kapısı (kamera kayması + netlik) | ⚠️ ölçülüyor, ekranda gösterilmiyor, eşikler [T] |
+| Çift top NMS (balls.js) | ✅ Messi klibinde tek top |
+| Toplu referans sayfası (tests/referans.html) | hazır, klasör yapısı bekleniyor |
+| Çapraz denetim turu | ✅ kritik bulgu yok, 2 küçük bulgu düzeltildi |
+
+Testler: 194/194. Hepsi yerel commit, push yok.
+
+**Sıradaki parti:** iz gecikmesi, kalite kapısını ekranda gösterme + analizi durdurma, iki puan (teknik + sonuç), hız + FIFA tarzı yükleme ekranı, sonra FIFA 14 arayüzü.
+**Senden:** videoları `test-videolar/<tur>/<ayak>/<aci>/<iyi|kotu>_<ad>.mp4` yapısına ayırıp `node scripts/referans-liste.mjs`. Telefon için Artifact: Google model dosyalarını (~30 MB) indirme onayı.
