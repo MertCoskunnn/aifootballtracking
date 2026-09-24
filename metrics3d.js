@@ -102,8 +102,8 @@ export function contactPosture(track, contact, kickSide, half = 2) {
 }
 
 export const POSTURE_LABEL = {
-  supportKnee: 'Destek dizi', kickKnee: 'Vuran diz', kickHip: 'Vuran bacağın kalçası',
-  trunkLean: 'Gövdenin eğimi', trunkSide: 'Gövdenin yana yatışı', armOpen: 'Karşı kol',
+  supportKnee: 'Destek dizi', kickKnee: 'Vuran diz', kickHip: 'Vuran uyluk (+ önde)',
+  trunkLean: 'Gövdenin öne eğimi', trunkSide: 'Gövdenin yana yatışı (+ destek tarafına)', armOpen: 'Karşı kol',
 };
 // Ölçüm gürültüsü bandı (derece): bu kadar fark ceza almaz. Kaynak: Messi'nin aynı videodaki iki
 // frikiği (aynı oyuncu, aynı teknik) arasındaki fark: destek dizi 14°, kol 15°, gövde eğimi 6°,

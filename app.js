@@ -12,15 +12,15 @@
 // şeyler: iskeletin oturması (buildTrack), topun bulunması ve temas karesinin bulunması (findKicks) —
 // bunlar hâlâ detect.js/pipeline.js'te. classifyView/suggestMode artık modu/açıyı SEÇMİYOR, sadece
 // "seçtiğin açı ile videonun görünüşü uyuşmuyor" diye yumuşak bir uyarı için kullanılıyor (viewWarning).
-import * as pipeline from './pipeline.js?v=41';
-import { measure, measureFreeKick, buildTrack, bodyLeg } from './metrics.js?v=41';
-import { readOutcome, outcomeProblems, describeOutcome, combineOutcomes } from './outcome.js?v=41';
-import { diagnose, unexplainedNote, kaynakMetni } from './sebep.js?v=41';
-import { evaluate } from './coach.js?v=41';
-import { fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=41';
-import { getRuleSet } from './rules.js?v=41';
-import { pickTrackedPerson, pickDisplayBall, nearestBallWidth, personAtPoint } from './display.js?v=41';
-import { contactPosture, compareToReference, referenceFor } from './metrics3d.js?v=41';
+import * as pipeline from './pipeline.js?v=43';
+import { measure, measureFreeKick, buildTrack, bodyLeg } from './metrics.js?v=43';
+import { readOutcome, outcomeProblems, describeOutcome, combineOutcomes } from './outcome.js?v=43';
+import { diagnose, unexplainedNote, kaynakMetni } from './sebep.js?v=43';
+import { evaluate } from './coach.js?v=43';
+import { fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=43';
+import { getRuleSet } from './rules.js?v=43';
+import { pickTrackedPerson, pickDisplayBall, nearestBallWidth, personAtPoint } from './display.js?v=43';
+import { contactPosture, compareToReference, referenceFor } from './metrics3d.js?v=43';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');
@@ -40,7 +40,7 @@ window.__hoca = state;
 // videosundan uygulamanın kendi hattıyla ÖLÇÜLDÜ (tests/postur.html → referans/messi-plase.json).
 // undefined = henüz yükleniyor, null = yüklenemedi. Analiz yükleme bitmeden gelirse bekleyip tekrar çalışır.
 let messiRef;
-const messiRefReady = fetch('referans/messi-plase.json?v=42').then((r) => (r.ok ? r.json() : null)).catch(() => null)
+const messiRefReady = fetch('referans/messi-plase.json?v=43').then((r) => (r.ok ? r.json() : null)).catch(() => null)
   .then((j) => { messiRef = j; });
 
 function setStatus(t) { $('status').textContent = t; }
@@ -661,9 +661,9 @@ function placementReport(foot) {
   }
   const cmp = compareToReference(posture, ref.posture, 'Messi');
   const band = (s) => (s >= 80 ? '' : s >= 50 ? 'mid' : 'low');
-  const verdict = cmp.total >= 85 ? 'Messi'nin temas postürüne çok yakın. Bu vuruşu tekrarla.'
-    : cmp.total >= 65 ? 'Fena değil ama Messi'nin postüründen belirgin farkların var.'
-      : 'Kötü vuruş: temas anındaki postürün Messi'ninkinden uzak.';
+  const verdict = cmp.total >= 85 ? "Messi'nin temas postürüne çok yakın. Bu vuruşu tekrarla."
+    : cmp.total >= 65 ? "Fena değil ama Messi'nin postüründen belirgin farkların var."
+      : "Kötü vuruş: temas anındaki postürün Messi'ninkinden uzak.";
   const worst = cmp.items.filter((i) => i.tip && i.score < 85).slice(0, 2);
   const fmt = (v) => `${Math.round(v)}°`;
   el.innerHTML = `${head}

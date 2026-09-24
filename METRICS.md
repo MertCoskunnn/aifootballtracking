@@ -139,3 +139,22 @@ Messi'nin destek diziyle kıyaslanır (test: aynalanmış iskelet birebir aynı 
   bakınca temas 14.40.
 - **Açık:** Bant ve toleranslar [T]. Mert'in 60 fps videoları (aynı vuruş yandan+arkadan) ile
   açıdan bağımsızlık ve gerçek ayrışma ölçülecek.
+
+**İlk deneme: 2026-09-24 akşamı gelen 8 kısa klip** (test-videolar kökü, 1080p WhatsApp; Mert'in
+kendisi değil, farklı oyuncular, çoğu arkadan/önden). Tek ayak seçilerek aynalanmış Messi'ye göre:
+
+| Klip | Temas | Algılanan ayak | Sağ ayak puanı | Sol ayak puanı |
+|---|---|---|---|---|
+| mert.mp4 | 0.53 | sol | 71 | 73 |
+| 19.11.mp4 | 2.80 | sağ | 87 | 87 |
+| 19.11.21 (2) | 1.93 | sol | 83 | 79 |
+| (2)_1 | 1.10 | sol | 84 | 86 |
+| (2)_2 | 0.40 | sol | 59 | 68 |
+| (2)_3 | vuruş bulunamadı | | | |
+| (2)_4 | 0.30 | sağ | 50 | 55 |
+| (2)_5 | 1.07 | sağ | 90 | 86 |
+
+- Puanlar 50-90, Messi 100: ölçü ayrıştırıyor. **Doğru ayrıştırıp ayrıştırmadığı bilinmiyor:** hangi
+  vuruşun iyi olduğu, hangi ayakla hangi doksana gittiği Mert'ten öğrenilecek.
+- Algılanan ayak iki klipte görüntüyle uyuşmuyor gibi (arkadan çekimde sol/sağ karışması). v1'de ayak
+  kullanıcı seçimi olduğu için puanı etkilemiyor.
