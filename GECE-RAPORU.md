@@ -68,8 +68,9 @@ Testler: 194/194. Hepsi yerel commit, push yok.
 | c9b1dc7 | **Teşhis motoru**: outcome.js (top ne yaptı) + sebep.js (neden-sonuç tablosu, kaynaklı) + rapor başında "Ne oldu / Neden / Nasıl düzelir". Tablo: SEBEP-SONUC.md | Referans 9: "Top yana kıvrıldı, çünkü vuruştan sonra ayağın gövdenin önünden fazla çaprazladı" |
 | fb22a83 | TikTok bitiş ekranı ve sahne kesmesi: vuruş aranmaz, takip kesmeden geçmez | Eşikler 9 referans videosunda ölçüldü (bitiş ekranı 7/7) |
 | ad00854 | Kameradan uzaklaşan topun yüksekliği yandan okunmaz, yanlış "havalandı" demez | Messi klibinde bulundu |
+| 3ff9893 | Top izi yanlış nesneye bağlanmasın: uçuş hızı, hız kopukluğu, iz temastan 0.2 sn içinde başlamalı, en iyi aday elenirse sıradaki | Referans 9: iz ve teşhis çalışıyor. Messi: iz artık çizilmiyor (yanlış iz yerine iz yok) |
 
-Messi (yandan, şut, sol) hâlâ **100**. Telefon sürümü güncellendi (aynı bağlantı). Testler 229/229.
+Messi (yandan, şut, sol) hâlâ **100**. **Bilinen eksik:** Messi klibinde gerçek top adaylarda var ama iz kurulamıyor (temas topunun boyutu yanlış ölçülüyor, 66 px; gerçek top ~20 px). Sıradaki işlerden biri. Telefon sürümü güncellendi (aynı bağlantı). Testler 229/229.
 
 **Dürüst durum:**
 - Puan eşiklerinin çoğu **[T] tahmin**. Referans 9'daki iyi bir şuta 27/100 verdi; bu, eşiklerin sert olduğunu gösteriyor. Düzeltmenin yolu senin etiketlerin (aşağıda).
