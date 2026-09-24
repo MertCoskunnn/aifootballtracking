@@ -75,6 +75,6 @@ export function describeOutcome(o) {
   if (o.height) parts.push(o.height === 'yerden' ? 'yerden gitti' : o.height === 'yüksek' ? `havalandı (${Math.round(o.launchDeg)}°)` : `orta yükseklikte kalktı (${Math.round(o.launchDeg)}°)`);
   if (o.speedLabel) parts.push(o.speedLabel === 'zayıf' ? 'yavaş gitti' : 'hızlı gitti');
   if (o.direction) parts.push(o.direction === 'düz' ? 'düz gitti' : `${o.direction}a gitti`);
-  if (o.curve) parts.push(o.curve === 'var' ? 'falso aldı' : 'falso almadı');
+  if (o.curve) parts.push(o.curve === 'var' ? 'havada yana kıvrıldı (falso)' : 'kıvrılmadan gitti');
   return parts.length ? `Top ${parts.join(', ')}.` : null;
 }

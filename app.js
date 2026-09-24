@@ -12,14 +12,14 @@
 // şeyler: iskeletin oturması (buildTrack), topun bulunması ve temas karesinin bulunması (findKicks) —
 // bunlar hâlâ detect.js/pipeline.js'te. classifyView/suggestMode artık modu/açıyı SEÇMİYOR, sadece
 // "seçtiğin açı ile videonun görünüşü uyuşmuyor" diye yumuşak bir uyarı için kullanılıyor (viewWarning).
-import * as pipeline from './pipeline.js?v=34';
-import { measure, measureFreeKick, buildTrack, bodyLeg } from './metrics.js?v=34';
-import { readOutcome, outcomeProblems, describeOutcome } from './outcome.js?v=34';
-import { diagnose, unexplainedNote, kaynakMetni } from './sebep.js?v=34';
-import { evaluate } from './coach.js?v=34';
-import { fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=34';
-import { getRuleSet } from './rules.js?v=34';
-import { pickTrackedPerson, pickDisplayBall, nearestBallWidth, personAtPoint } from './display.js?v=34';
+import * as pipeline from './pipeline.js?v=35';
+import { measure, measureFreeKick, buildTrack, bodyLeg } from './metrics.js?v=35';
+import { readOutcome, outcomeProblems, describeOutcome } from './outcome.js?v=35';
+import { diagnose, unexplainedNote, kaynakMetni } from './sebep.js?v=35';
+import { evaluate } from './coach.js?v=35';
+import { fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=35';
+import { getRuleSet } from './rules.js?v=35';
+import { pickTrackedPerson, pickDisplayBall, nearestBallWidth, personAtPoint } from './display.js?v=35';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');
