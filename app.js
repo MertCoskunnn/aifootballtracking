@@ -17,6 +17,7 @@ import { measure, measureFreeKick, buildTrack } from './metrics.js?v=25';
 import { evaluate } from './coach.js?v=25';
 import { ballFlight } from './trajectory.js?v=25';
 import { getRuleSet } from './rules.js?v=25';
+import { pickTrackedPerson, pickDisplayBall, pickLiveDisplay } from './display.js?v=25';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');
@@ -74,13 +75,18 @@ function runPass(t0, t1, fps, label) {
   });
 }
 
-// Tarama sırasında (henüz oyuncu seçilmeden) o anki kareyi çizer: herkes eşit parlaklıkta,
-// tespit edilen her top ince beyaz bir çemberle işaretlenir.
+// Tarama sırasında (henüz vuruş bulunmadı, oyuncu/top seçilmedi) o anki kareyi çizer.
+// cp-18-tek-oyuncu-tek-top: kalabalık bir sahnede (ör. yayın görüntüsü) HERKESİ soluk çizmek
+// yerine tek bir tahmin gösterir — topa en yakın kişi + en güvenli top (pickLiveDisplay,
+// display.js). Kesin değildir (vuruş henüz bulunmadı), sadece "bir şey oluyor" geri bildirimi;
+// tarama ekranı zaten ileride bir yükleme ekranıyla değişecek, bu yüzden burada fazla
+// mühendislik yapılmadı — tek kişi/tek top bulunamazsa (frame boşsa) hiçbir şey çizilmez.
 function drawLive(frame) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   const s = canvas.width / 400;
-  for (const p of frame.people || []) drawPose(p, s, true);
-  drawBalls(frame, s);
+  const { person, ball } = pickLiveDisplay(frame);
+  if (person) drawPose(person, s, true);
+  if (ball) drawBallMarker(ball, s, false);
 }
 
 // cp-17-nisangah: topu saran işaret artık oyunlardaki crosshair gibi ince bir nişangah — topun
@@ -105,18 +111,12 @@ function drawBallMarker(b, s, isContact) {
   ctx.stroke();
 }
 
+// Oyuncu/top henüz seçilmemişken (elle işaretleme akışının başı, state.track yok) o karedeki
+// TÜM ham top tespitlerini gösterir — kullanıcı hangi topun doğru top olduğunu bulmaya çalışıyor,
+// tek bir tahminle onu yanıltmayalım. state.track kurulduktan sonra bu fonksiyon kullanılmaz,
+// yerini pickDisplayBall (display.js, cp-18-tek-oyuncu-tek-top) alır.
 function drawBalls(frame, s) {
   for (const b of frame.balls || []) drawBallMarker(b, s, false);
-}
-
-// Temas topu (state.ball) sadece {x,y} taşır, genişliği (w) yok. Nişangahı doğru boyutlandırmak
-// için o karedeki HAM tespitlerden state.ball'a en yakın olanın w'sini ödünç alırız; hiç tespit
-// yoksa (ör. elle işaretlenmiş, top o karede hiç bulunamamış) makul bir varsayılana düşer.
-function nearestBallWidth(frame, point) {
-  const cands = (frame?.balls || []).filter((b) => b.w > 0);
-  if (!cands.length) return 16;
-  const near = cands.reduce((a, b) => (Math.hypot(b.x - point.x, b.y - point.y) < Math.hypot(a.x - point.x, a.y - point.y) ? b : a));
-  return near.w;
 }
 
 // Vuruş bulunamadığında (ya da video çok kısa/otomatik hiçbir şey vermediğinde) elle işaretleme
@@ -218,7 +218,7 @@ function loadKick(i) {
   const k = state.kicks[i];
   loadFrames(k.frames, k);
   state.contact = k.contact;
-  state.ball = { x: k.rest.x, y: k.rest.y };
+  state.ball = { x: k.rest.x, y: k.rest.y, w: k.rest.w }; // w varsa nişangah tahmine değil gerçek boyuta göre çizilir
   state.track = buildTrack(k.frames.map((f) => f.people), k.contact, state.ball);
   show(k.contact);
   updateReady();
@@ -299,16 +299,25 @@ function drawPose(p, s, main) {
   ctx.globalAlpha = 1;
 }
 
+// cp-18-tek-oyuncu-tek-top: oyuncu/top seçildikten (state.track kurulduktan) SONRA ekranda
+// SADECE vuran oyuncunun iskeleti ve SADECE vurulan top görünür — kaleci, yan çizgideki kişiler
+// ve yerdeki başka toplar artık çizilmiyor (eskiden hepsi soluk/ince çizilirdi, kafa karıştırıcıydı).
+// Seçim mantığının kendisi display.js'te (saf, Node testli); burada sadece SONUCU çiziyoruz.
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   const s = canvas.width / 400; // çizgi kalınlığı videonun boyutuna göre
   const f = state.frames[state.index];
-  const main = state.track ? state.track[state.index] : null;
-  // Oyuncu seçilmeden önce herkes aynı çizilir. Seçildikten sonra oyuncu parlak, diğerleri soluk.
-  for (const p of f?.people || []) drawPose(p, s, state.track ? p === main : true);
-  if (f) drawBalls(f, s); // tespit edilen her top soluk bir nişangahla (temas topu ayrıca aşağıda, turuncu)
-  if (state.ball && state.index === state.contact) {
-    drawBallMarker({ x: state.ball.x, y: state.ball.y, w: state.ball.w ?? nearestBallWidth(f, state.ball) }, s, true);
+  ensureFlight(); // ballFlight, hem şut çizgisi hem de temas-sonrası tek-top seçimi için gerekli
+  if (state.track) {
+    const main = pickTrackedPerson(state.track, state.index);
+    if (main) drawPose(main, s, true); // track o karede kayıpsa (null) hiç iskelet çizilmez, başkasına atlanmaz
+    const ball = pickDisplayBall(f, state.index, state.contact, state.ball, flightPointAt(state.index));
+    if (ball) drawBallMarker(ball, s, state.index === state.contact);
+  } else {
+    // Henüz oyuncu/top seçilmedi (elle işaretleme akışının başı): kullanıcı doğru kişiyi/topu
+    // bulmaya çalışıyor, bu yüzden burada hâlâ HERKES ve HER top tespiti gösterilir.
+    for (const p of f?.people || []) drawPose(p, s, true);
+    if (f) drawBalls(f, s);
   }
   drawFlight(s);
   if (state.index === state.contact) {
@@ -317,15 +326,22 @@ function draw() {
   }
 }
 
-// Şut çizgisi: temastan sonra topun izlediği yol, o ana kadar olan kısmı (oyunlardaki gibi).
-// Yol temas/top değişince bir kez hesaplanır, oynatırken sadece çizilir.
-function drawFlight(s) {
-  if (state.contact === null || !state.ball || state.index <= state.contact) return;
+// state.flight'ı (temastan sonra topun izlediği yol) temas/top değişince bir kez hesaplar.
+// draw() hem şut çizgisini çizmek hem de temas-sonrası tek-top seçimini (pickDisplayBall) yapmak
+// için buna ihtiyaç duyuyor, bu yüzden hesaplama drawFlight()'tan buraya taşındı (cp-18).
+function ensureFlight() {
+  if (state.contact === null || !state.ball) { state.flight = null; state.flightKey = null; return; }
   const key = `${state.contact}:${state.ball.x}:${state.ball.y}:${state.frames.length}`;
   if (state.flightKey !== key) {
     state.flight = ballFlight(state.frames, state.contact, state.ball, canvas.width * 0.12);
     state.flightKey = key;
   }
+}
+const flightPointAt = (i) => state.flight?.find((p) => p.i === i) || null;
+
+// Şut çizgisi: temastan sonra topun izlediği yol, o ana kadar olan kısmı (oyunlardaki gibi).
+function drawFlight(s) {
+  if (state.contact === null || !state.ball || state.index <= state.contact || !state.flight) return;
   const pts = state.flight.filter((p) => p.i <= state.index);
   if (pts.length < 2) return;
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
