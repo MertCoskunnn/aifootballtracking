@@ -12,8 +12,8 @@ import { PoseLandmarker, ObjectDetector, FilesetResolver } from 'https://cdn.jsd
 // kutusunda BlazePose başarısız olunca devreye girer (aşağıdaki personBoxes döngüsü). Ağır
 // (TF.js/model) iş movenet.js'te, saf 17→33 nokta dönüşümü keypoints.js'te (Node testli) —
 // bu dosya sadece ikisini birbirine bağlar.
-import * as movenet from './movenet.js?v=25';
-import { mapCocoToMediapipe, acceptMoveNetPose } from './keypoints.js?v=25';
+import * as movenet from './movenet.js?v=27';
+import { mapCocoToMediapipe, acceptMoveNetPose } from './keypoints.js?v=27';
 // cp-15-kalite-kapisi: "sabit kameralı, net idman videosu" ürün kararı (PRODUCT-PLAN.md). Saf
 // hesaplama quality.js'te (Node testli); burada sadece her karenin küçük gri kopyasını üretip
 // frame.gray'e koyuyoruz (kamera-sabitliği için) — kimin vuruş olduğunu bilmeyiz, karar
@@ -21,10 +21,10 @@ import { mapCocoToMediapipe, acceptMoveNetPose } from './keypoints.js?v=25';
 // cp-16-netlik: ayrıca her karede vuran adayın (top varsa top, yoksa en yakın oyuncu) çevresinde
 // GERÇEK çözünürlükte (ölçeksiz) bir kırpıntıdan Laplacian varyansı hesaplayıp frame.sharp'a
 // yazıyoruz — 64x36'da oyuncu birkaç piksele indiği için o kapı anlamsızdı (bkz. quality.js başı).
-import { rgbaToGray, laplacianVariance, round2, SHRINK_W, SHRINK_H, SHARP_MIN, SHARP_MAX } from './quality.js?v=25';
+import { rgbaToGray, laplacianVariance, round2, SHRINK_W, SHRINK_H, SHARP_MIN, SHARP_MAX } from './quality.js?v=27';
 // cp-17-top-birlesimi: aynı topun birden fazla kırpıntıda bulunup iki kez sayılmasını önleyen
 // birleştirme (IoU + merkez-mesafesi, saf fonksiyon, Node testli). Detay: balls.js başı.
-import { mergeBallDetections } from './balls.js?v=25';
+import { mergeBallDetections } from './balls.js?v=27';
 
 const BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm';
 const POSE_MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task';

@@ -14,7 +14,7 @@
 // fps'te zıplıyor (top bulanık ya da bir kare kayıp); fit sürekli bir eğri olduğu için nişangah
 // akıcı hareket eder, tek bir kötü tespit onu oynatmaz. fit kurulamadıysa (çok az/dağınık veri) eski
 // kare-tabanlı davranışa (flightPointFallback) düşülür.
-import { flightAt } from './trajectory.js?v=26';
+import { flightAt } from './trajectory.js?v=27';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const FEET = [27, 28, 31, 32]; // ayak bileği (sol/sağ), ayak ucu (sol/sağ)
