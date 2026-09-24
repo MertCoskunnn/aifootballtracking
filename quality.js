@@ -4,21 +4,31 @@
 // modele değil basit piksel karşılaştırmasına dayanan iki hafif kapı sunar:
 //   1) Kamera sabitliği: vuruş penceresinde arka planın (oyuncu/top kutuları HARİÇ) ne kadar
 //      kaydığını ve kenar bölgelerin merkeze göre zıt yönde kayıp kaymadığını (zoom) ölçer.
-//   2) Netlik: temas karesi civarında oyuncu kutusu içindeki Laplacian varyansını (keskinlik) ölçer.
+//   2) Netlik (cp-16): vuran oyuncu/topun etrafındaki 160-320px GERÇEK çözünürlüklü (ölçeksiz)
+//      kırpıntıda Laplacian varyansını ölçer. Kırpıntı vision.js'te üretilir (frame.sharp);
+//      bu dosya sadece sayıyı eşikle karşılaştırır (assessSharpnessWindow).
 // Saf fonksiyonlar: DOM'a, MediaPipe'a bağımlı değil (detect.js/context.js gibi), Node ile test
 // edilir (tests/quality.test.mjs). Girdi her yerde düz gri tonlu piksel dizisi (Uint8Array/
 // Uint8ClampedArray, tek kanal) + genişlik/yükseklik + piksel-uzayında kutular {x0,y0,x1,y1}.
 //
 // Eşikler ilk sürümde TAHMİN [T] — RESEARCH*.md'deki diğer eşikler gibi gerçek saha videolarıyla
-// kalibre edilecek (bkz. o dosyalardaki "[T] Teknik tahmin" notu). Sayılar küçültülmüş
-// (SHRINK_W×SHRINK_H) görüntü uzayında piksel cinsindendir.
+// kalibre edilecek (bkz. o dosyalardaki "[T] Teknik tahmin" notu). Kamera-sabitliği sayıları
+// küçültülmüş (SHRINK_W×SHRINK_H) görüntü uzayında; netlik (cp-16'dan itibaren) GERÇEK piksel
+// uzayında (SHARP_MIN..SHARP_MAX) piksel cinsindendir — ikisi artık AYNI ölçek DEĞİL, bkz. aşağı.
 
-// Karelerin küçültüldüğü boyut (piksel). Küçük tutulan sebep: kamera-kayması araması ±8 pikser
-// için her aday kaymada tüm pikseller taranıyor (bkz. regionShift); tam çözünürlükte bu maliyetli
-// olurdu. Netlik ölçümü de aynı küçültmeyi kullanır (tek tuval, bkz. vision.js entegrasyonu) —
-// bu yüzden oyuncu kutusu bu boyutta bazen çok az piksele düşer; ilk sürümün bilinen kısıtı.
+// Karelerin küçültüldüğü boyut (piksel), SADECE kamera-sabitliği için (cp-16'dan önce netlik de
+// bunu kullanıyordu — oyuncu kutusu bu boyutta birkaç piksele iniyordu, Laplacian anlamsızdı,
+// bkz. GECE-RAPORU). Küçük tutulma sebebi: kamera-kayması araması ±8 piksel için her aday
+// kaymada tüm pikseller taranıyor (bkz. regionShift); tam çözünürlükte bu maliyetli olurdu.
 export const SHRINK_W = 64; // [T]
 export const SHRINK_H = 36; // [T]
+
+// cp-16-netlik: vision.js'in netlik kırpıntısı için kullandığı kaynak-bölge boyut aralığı
+// (piksel, ORİJİNAL kare uzayında, ÖLÇEKSİZ — CROP=320 ile aynı desen, bkz. vision.js).
+// Alt sınır (160) çok küçük/uzak oyuncuda bile anlamlı doku kalsın diye; üst sınır (320) mevcut
+// pose-kırpıntı tuvaliyle (cropCv) aynı boyut, ekstra tuval açmadan yeniden kullanılabilsin diye.
+export const SHARP_MIN = 160; // [T]
+export const SHARP_MAX = 320; // [T]
 
 // Kayma arama yarıçapı (küçültülmüş görüntüde piksel). ±8: tarif edilen ürün kararıyla aynı.
 export const SEARCH_RADIUS = 8; // [T]
@@ -37,10 +47,17 @@ export const MAX_ZOOM_PX = 1.5; // [T]
 
 // Netlik: temas karesinin ±bu kadar karesi taranır (istenen ürün kararıyla aynı: "±3 karede").
 export const BLUR_WINDOW_FRAMES = 3; // [T]
-// Laplacian varyansı bu değerin altındaysa "bulanık" sayılır (küçültülmüş görüntüde, oyuncu
-// kutusu içinde). Küçük SHRINK boyutu yüzünden mutlak ölçek gerçek çözünürlükten farklı; gerçek
-// videolarla kalibre edilecek.
-export const MIN_SHARPNESS = 25; // [T]
+// vision.js'in ürettiği frame.sharp (SHARP_MIN..SHARP_MAX'lık GERÇEK çözünürlük kırpıntısının
+// Laplacian varyansı) bu değerin altındaysa "bulanık" sayılır.
+// cp-15'te bu eşik 25'ti ama 64x36'ya küçültülmüş kareler üzerinde hesaplanıyordu: o küçültme
+// zaten kendi başına bir bulanıklaştırma filtresidir (gerçek doku/kenarlar ortalanıp kayboluyor),
+// üstelik oyuncu kutusu o uzayda birkaç piksele iniyordu — ölçüm neredeyse rastgeleydi (bkz.
+// GECE-RAPORU, dosya başı not). cp-16'dan itibaren netlik ÖLÇEKSİZ gerçek piksellerden hesaplanır;
+// bu 100 değeri OpenCV'nin yaygın "varyans-of-Laplacian" bulanıklık testlerinde referans alınan
+// ~100 kabaca aralığından alınmış bir BAŞLANGIÇ TAHMİNİdir — sentetik testler (bkz.
+// tests/quality.test.mjs) sadece keskin/bulanık AYRIMINI doğrular, gerçek saha ölçeğini değil.
+// Messi/Mert klipleriyle tarayıcıda (frame.sharp değerlerini loglayıp) kalibre edilmelidir.
+export const MIN_SHARPNESS = 100; // [T] (eskiden 25, 64x36 uzayında — o ölçek artık geçersiz)
 
 // --- Genel yardımcılar -------------------------------------------------------------------
 
@@ -53,7 +70,8 @@ export function rgbaToGray(rgba, w, h) {
   return out;
 }
 
-const round2 = (v) => Math.round(v * 100) / 100;
+// vision.js de kullanır (frame.sharp'ı yazmadan önce yuvarlamak için, cp-16-netlik).
+export const round2 = (v) => Math.round(v * 100) / 100;
 
 // Noktanın herhangi bir kutunun içinde olup olmadığı (x0,y0 dahil; x1,y1 hariç)
 const inAnyBox = (x, y, boxes) => boxes.some((b) => x >= b.x0 && x < b.x1 && y >= b.y0 && y < b.y1);
@@ -216,8 +234,12 @@ function sampleIndices(i0, i1, count) {
 }
 
 /**
- * Temas ±BLUR_WINDOW_FRAMES karede, oyuncu kutusu içindeki en düşük (en kötü) Laplacian varyansı.
- * Gri veri ya da iskelet yoksa (kare işlenmemiş/oyuncu bulunamamış) o kare atlanır; hiçbiri
+ * Temas ±BLUR_WINDOW_FRAMES karede, vision.js'in önceden hesapladığı frame.sharp (SHARP_MIN..
+ * SHARP_MAX'lık gerçek-çözünürlük kırpıntısının Laplacian varyansı, cp-16-netlik) değerlerinin
+ * en düşüğü (en kötüsü). ESKİDEN (cp-15) burada frame.gray + personBoxInGray ile 64x36'ya
+ * küçültülmüş kareden yeniden hesaplanıyordu; artık ölçüm vision.js'te BİR KEZ yapılıp frame'e
+ * yazılıyor, burası sadece pencere içindeki minimumu alıp eşikle karşılaştırıyor.
+ * frame.sharp yoksa (kare işlenmemiş/odak bölgesi bulunamamış) o kare atlanır; hiçbiri
  * kullanılamazsa ok:true, deger:null döner (context.js'teki "ölçülemedi" deseniyle aynı: veri
  * eksikliği akışı ENGELLEMEZ).
  */
@@ -226,11 +248,8 @@ function assessSharpnessWindow(frames, kick) {
   const to = Math.min(frames.length - 1, kick.contact + BLUR_WINDOW_FRAMES);
   let minVar = Infinity, any = false;
   for (let i = from; i <= to; i++) {
-    const f = frames[i];
-    if (!f?.gray) continue;
-    const box = personBoxInGray(f.people?.[kick.person], f.gray);
-    if (!box) continue;
-    const v = laplacianVariance(f.gray.data, f.gray.w, f.gray.h, box);
+    const v = frames[i]?.sharp;
+    if (v == null) continue;
     if (v < minVar) minVar = v;
     any = true;
   }
@@ -240,8 +259,10 @@ function assessSharpnessWindow(frames, kick) {
 
 /**
  * Bir vuruş için iki kapıyı birden değerlendirir: kamera sabitliği + netlik.
- * frames: collectKicks'e giden aynı yoğun kare listesi, HER karede .gray dolu olmalı (vision.js,
- * processRange). kick: findKicks/collectKicks çıktısındaki bir vuruş ({ contact, person, rest }).
+ * frames: collectKicks'e giden aynı yoğun kare listesi (vision.js, processRange) — kamera kapısı
+ * için HER karede .gray (64x36, küçültülmüş), netlik kapısı için HER karede .sharp (gerçek
+ * çözünürlük Laplacian varyansı, cp-16) dolu olmalı; ikisi de eksikse kapı engellemez, geçer sayar.
+ * kick: findKicks/collectKicks çıktısındaki bir vuruş ({ contact, person, rest }).
  * fps: bu karelerin işlendiği hız.
  * Dönen: { kamera: { ok, kayma }, netlik: { ok, deger } } — analysis.js'te kick.quality olarak eklenir.
  */

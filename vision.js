@@ -16,8 +16,12 @@ import * as movenet from './movenet.js?v=25';
 import { mapCocoToMediapipe, acceptMoveNetPose } from './keypoints.js?v=25';
 // cp-15-kalite-kapisi: "sabit kameralı, net idman videosu" ürün kararı (PRODUCT-PLAN.md). Saf
 // hesaplama quality.js'te (Node testli); burada sadece her karenin küçük gri kopyasını üretip
-// frame.gray'e koyuyoruz — kimin vuruş olduğunu bilmeyiz, karar analysis.js'te (collectKicks).
-import { rgbaToGray, SHRINK_W, SHRINK_H } from './quality.js?v=25';
+// frame.gray'e koyuyoruz (kamera-sabitliği için) — kimin vuruş olduğunu bilmeyiz, karar
+// analysis.js'te (collectKicks).
+// cp-16-netlik: ayrıca her karede vuran adayın (top varsa top, yoksa en yakın oyuncu) çevresinde
+// GERÇEK çözünürlükte (ölçeksiz) bir kırpıntıdan Laplacian varyansı hesaplayıp frame.sharp'a
+// yazıyoruz — 64x36'da oyuncu birkaç piksele indiği için o kapı anlamsızdı (bkz. quality.js başı).
+import { rgbaToGray, laplacianVariance, round2, SHRINK_W, SHRINK_H, SHARP_MIN, SHARP_MAX } from './quality.js?v=25';
 
 const BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm';
 const POSE_MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task';
@@ -194,9 +198,33 @@ export async function processRange(video, { t0 = 0, t1 = video.duration, fps = 3
     if (bestNear) lastBall = bestNear;
     // cp-15-kalite-kapisi: küçük gri kopya + orijinal karadan bu kopyaya ölçek oranı (sx,sy) —
     // quality.js kutuları (oyuncu/top) bu oranla küçültülmüş uzaya çevirir (bkz. assessKickQuality).
+    // SADECE kamera-sabitliği için (cp-16'dan itibaren netlik başka yoldan, bkz. aşağı).
     qctx.drawImage(frameCv, 0, 0, W, H, 0, 0, SHRINK_W, SHRINK_H);
     const gray = rgbaToGray(qctx.getImageData(0, 0, SHRINK_W, SHRINK_H).data, SHRINK_W, SHRINK_H);
-    const frame = { t, people, balls: merged, gray: { data: gray, w: SHRINK_W, h: SHRINK_H, sx: SHRINK_W / W, sy: SHRINK_H / H } };
+    // cp-16-netlik: vuran adayın (top biliniyorsa top, yoksa ilk oyuncunun ayak çevresi) etrafında
+    // SHARP_MIN..SHARP_MAX px'lik kaynak bölgeyi cropCv'ye (pose/top taramasında zaten var, 320x320)
+    // ÖLÇEKSİZ (1:1, kaynak boyutu = hedef boyutu) çiziyoruz ki Laplacian gerçek pikselden gelsin —
+    // yeniden boyutlandırma (scale) kendi bulanıklığını katmasın. Ne top ne oyuncu varsa null:
+    // context.js'teki "ölçülemedi" deseniyle aynı, tarama çökmez, quality.js kapıyı engellemez.
+    const sharpFocus = bestNear
+      ? { x: bestNear.x, y: bestNear.y, s: clamp(bestNear.w * 8, SHARP_MIN, SHARP_MAX) }
+      : lastBall
+        ? { x: lastBall.x, y: lastBall.y, s: clamp(lastBall.w * 8, SHARP_MIN, SHARP_MAX) }
+        : people[0]
+          ? { ...feetRegion(people[0]), s: clamp(feetRegion(people[0]).s, SHARP_MIN, SHARP_MAX) }
+          : null;
+    let sharp = null;
+    if (sharpFocus) {
+      const sz = Math.round(sharpFocus.s);
+      cctx.clearRect(0, 0, CROP, CROP);
+      cctx.drawImage(frameCv, sharpFocus.x - sz / 2, sharpFocus.y - sz / 2, sz, sz, 0, 0, sz, sz);
+      const sharpGray = rgbaToGray(cctx.getImageData(0, 0, sz, sz).data, sz, sz);
+      sharp = round2(laplacianVariance(sharpGray, sz, sz));
+    }
+    const frame = {
+      t, people, balls: merged, sharp,
+      gray: { data: gray, w: SHRINK_W, h: SHRINK_H, sx: SHRINK_W / W, sy: SHRINK_H / H },
+    };
     frames.push(frame);
     onFrame?.(frame, i, total);
   }
@@ -211,6 +239,9 @@ function nearBall(b, refs) {
   return refs.some((r) => r.x >= b.originX - padX && r.x <= b.originX + b.width + padX
     && r.y >= b.originY - padY && r.y <= b.originY + b.height + padY);
 }
+
+// cp-16-netlik: kaynak bölge boyutunu [min,max] aralığına sıkıştırır (bkz. sharpFocus yukarıda).
+const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
 const hipMid = (p) => ({ x: (p[23].x + p[24].x) / 2, y: (p[23].y + p[24].y) / 2 });
 const inBox = (pt, b) => pt.x >= b.originX && pt.x <= b.originX + b.width && pt.y >= b.originY && pt.y <= b.originY + b.height;
