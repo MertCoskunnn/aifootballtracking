@@ -59,12 +59,11 @@ button.primary { background: var(--pitch); color: #04140b; border: none; font-we
 
 button.stop { background: var(--bad); color: #2a0a0a; border: none; font-weight: 700; margin: 10px 0; }
 
-.kickRow { display: grid; grid-template-columns: 70px 50px 1fr 110px 50px; align-items: center; gap: 8px;
+.kickRow { display: grid; grid-template-columns: 70px 50px 1fr 50px; align-items: center; gap: 8px;
   padding: 10px 8px; border-top: 1px solid var(--line); cursor: pointer; border-radius: 6px; }
 .kickRow:hover { background: #0f1713; }
 .kickRow.active { background: #16281f; outline: 1px solid var(--pitch); }
 .kickRow .kt { font-variant-numeric: tabular-nums; color: var(--muted); }
 .kickRow .kf { font-weight: 600; }
 .kickRow .kv { color: var(--muted); font-size: .9rem; cursor: help; }
-.kickRow .km { color: var(--muted); font-size: .9rem; }
 .kickRow .ks { font-weight: 700; text-align: right; }

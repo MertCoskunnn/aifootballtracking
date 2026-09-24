@@ -7,6 +7,11 @@
 // tarayıcıda çalışan regresyon kontrol sayfası (tests/regresyon.html) AYNI kodu çalıştırmalı,
 // yoksa "Messi hâlâ 100 mü" kontrolü sadece burada doğru, orada yanlış olabilir. Bu dosyada artık
 // sadece arayüz ve akış var; tarama adımlarının kendisi pipeline.js'te.
+// cp-15-secmeli-menu: Otomatik mod kalktı (ürün kararı). Açı, vuruş türü ve ayak artık kullanıcının
+// KENDİ seçtiği üç ayrı liste; hiçbiri varsayılan değerle gelmiyor ("Seç..."). Otomatik kalan tek
+// şeyler: iskeletin oturması (buildTrack), topun bulunması ve temas karesinin bulunması (findKicks) —
+// bunlar hâlâ detect.js/pipeline.js'te. classifyView/suggestMode artık modu/açıyı SEÇMİYOR, sadece
+// "seçtiğin açı ile videonun görünüşü uyuşmuyor" diye yumuşak bir uyarı için kullanılıyor (viewWarning).
 import * as pipeline from './pipeline.js?v=25';
 import { measure, measureFreeKick, buildTrack } from './metrics.js?v=25';
 import { evaluate } from './coach.js?v=25';
@@ -42,7 +47,7 @@ function seek(t) {
 // Tarama (scanVideo) kendi Durdur butonunu ayrıca yönetir.
 function setBusy(b) {
   state.busy = b;
-  for (const id of ['prev', 'next', 'play', 'scrub', 'markContact', 'file', 'mode', 'foot']) $(id).disabled = b;
+  for (const id of ['prev', 'next', 'play', 'scrub', 'markContact', 'file', 'mode', 'foot', 'view']) $(id).disabled = b;
   $('progress').hidden = !b;
   $('stopBtn').hidden = !b;
   $('stageWrap').classList.toggle('busy', b);
@@ -177,15 +182,14 @@ function loadFrames(frames, kick) {
 }
 
 // Bir vuruş listesi satırına tıklanınca: o vuruşun penceresini yükler, temas/topu otomatik ayarlar,
-// oyuncuyu takip eder ve analiz eder. Mod/ayak seçimleri "Otomatik"a döner (tespit edilen değeri kullanır).
+// oyuncuyu takip eder ve analiz eder. cp-15-secmeli-menu: mod/ayak/açı artık kullanıcının kendi
+// seçimi — burada SIFIRLANMAZ, hangi vuruşa tıklanırsa tıklansın aynı seçimle değerlendirilir.
 function loadKick(i) {
   const k = state.kicks[i];
   loadFrames(k.frames, k);
   state.contact = k.contact;
   state.ball = { x: k.rest.x, y: k.rest.y };
   state.track = buildTrack(k.frames.map((f) => f.people), k.contact, state.ball);
-  $('mode').value = 'auto';
-  $('foot').value = 'auto';
   show(k.contact);
   updateReady();
   runAnalysis();
@@ -311,33 +315,27 @@ function drawFlight(s) {
   ctx.globalAlpha = 1;
 }
 
+// cp-15-secmeli-menu: "Hoca, analiz et" üçü de (açı, vuruş türü, ayak) seçilmeden pasif kalır.
 function updateReady() {
-  $('analyze').disabled = !(state.contact !== null && state.ball);
+  const ready = state.contact !== null && !!state.ball && !!$('mode').value && !!$('foot').value && !!$('view').value;
+  $('analyze').disabled = !ready;
   $('ballLabel').textContent = state.ball ? 'top işaretlendi ✓' : 'top işaretlenmedi';
 }
 
-// --- mod/ayak: "Otomatik" seçiliyse tespit edilen vuruşun değerini kullanır ---
+// --- mod/ayak/açı: artık üçü de kullanıcının kendi seçimi, "Otomatik" yok (cp-15-secmeli-menu) ---
 
-function effectiveMode() {
-  const sel = $('mode').value;
-  if (sel !== 'auto') return sel;
-  return state.activeKick?.suggestion?.mode || 'shot';
-}
-function effectiveFoot() {
-  const sel = $('foot').value;
-  if (sel !== 'auto') return sel;
-  return state.activeKick?.foot || 'right';
-}
+function effectiveMode() { return $('mode').value; }
+function effectiveFoot() { return $('foot').value; }
+function effectiveView() { return $('view').value; }
 
-// Kullanıcının seçtiği mod, tespit edilen kamera açısıyla uyuşmuyorsa uyarı döner (madde 5):
-// yandan çekimde şut/pas ölçülür, arkadan çekimde frikik. Açı bilinmiyorsa uyarı verilmez (kanıt yok).
+// Kullanıcının SEÇTİĞİ açı, algoritmanın videodan tahmin ettiği kamera açısıyla (classifyView)
+// uyuşmuyorsa yumuşak bir uyarı döner. Bu açı tespiti güvenilmez (bkz. METRICS.md "açık kalanlar"),
+// bu yüzden puanı ETKİLEMEZ, sadece bilgi amaçlı. Açı tespit edilemediyse (unknown) uyarı verilmez.
 const VIEW_LABEL = { side: 'Yandan', behind: 'Arkadan', front: 'Önden', unknown: 'Bilinmiyor' };
-function viewWarning(mode) {
-  const view = state.activeKick?.view?.view;
-  if (!view || view === 'unknown') return null;
-  const compatible = (mode === 'freekick' && view === 'behind') || ((mode === 'shot' || mode === 'pass' || mode === 'placement') && view === 'side');
-  if (compatible) return null;
-  return `Bu açıdan (${VIEW_LABEL[view]}) ${MODE_TITLE[mode]} ölçümleri güvenilir değil.`;
+function viewWarning(angle) {
+  const detected = state.activeKick?.view?.view;
+  if (!detected || detected === 'unknown' || !angle || detected === angle) return null;
+  return `Seçtiğin açı ${VIEW_LABEL[angle]} ama video ${VIEW_LABEL[detected]} çekilmiş görünüyor (bu açı tespiti güvenilmez, puanı etkilemez — kontrol etmek istersen).`;
 }
 
 // --- olaylar ---
@@ -370,20 +368,23 @@ $('scrub').addEventListener('input', (e) => show(Number(e.target.value)));
 $('prev').addEventListener('click', () => state.index > 0 && show(state.index - 1));
 $('next').addEventListener('click', () => state.index < state.frames.length - 1 && show(state.index + 1));
 
-// Kamera kurulumu moda göre değişir (RESEARCH.md bölüm 3-4). "Otomatik" seçiliyken genel bir ipucu gösterilir.
+// Kamera kurulumu moda göre değişir (RESEARCH.md bölüm 3-4). Hiçbiri seçilmemişken genel bir ipucu gösterilir.
 const SETUP_HINTS = {
-  auto: 'Videoyu yükle, hoca vuruşu ve kamera açısını kendisi bulsun. Yandan çekimde şut/pas, arkadan çekimde frikik ölçülür.',
+  '': 'Açıyı, vuruş türünü ve ayağı seç. Sonra videoyu yükle: hoca vuruş anını ve topu kendisi bulur, temas karesini istersen elle düzeltebilirsin.',
   shot: 'Çekim: tam yandan, telefon sabit, tüm vücut ve top kadrajda.',
-  placement: 'Çekim: tam yandan, telefon sabit, tüm vücut ve top kadrajda. Plase otomatik önerilmez, bu modu kendin seç.',
+  placement: 'Çekim: tam yandan, telefon sabit, tüm vücut ve top kadrajda.',
   pass: 'Çekim: tam yandan, telefon sabit, tüm vücut ve top kadrajda.',
   freekick: 'Çekim: arkadan ya da çapraz arkadan, telefon sabit, oyuncu ve top kadrajda.',
 };
+function updateSetupHint() { $('setupHint').textContent = SETUP_HINTS[$('mode').value] || SETUP_HINTS['']; }
 $('mode').addEventListener('change', () => {
-  $('setupHint').textContent = SETUP_HINTS[$('mode').value];
+  updateSetupHint();
   draw();
-  runAnalysis(); // mod değişince mevcut temas/topla yeniden analiz et (varsa)
+  updateReady();
+  runAnalysis(); // mod değişince mevcut temas/topla yeniden analiz et (üçü de seçiliyse)
 });
-$('foot').addEventListener('change', () => { draw(); runAnalysis(); });
+$('foot').addEventListener('change', () => { draw(); updateReady(); runAnalysis(); });
+$('view').addEventListener('change', () => { updateReady(); runAnalysis(); });
 
 document.addEventListener('keydown', (e) => {
   if (state.busy || $('stageWrap').hidden) return;
@@ -426,7 +427,7 @@ $('analyze').addEventListener('click', runAnalysis);
 // --- vuruş listesi ---
 
 const FOOT_LABEL = { right: 'Sağ', left: 'Sol' };
-const MODE_TITLE = { shot: 'Şut', pass: 'Pas', freekick: 'Frikik', placement: 'Plase' };
+const MODE_TITLE = { shot: 'Ayak üstü şut', pass: 'Pas', freekick: 'Frikik', placement: 'Plase' };
 
 function fmtTime(t) {
   const m = Math.floor(t / 60);
@@ -439,12 +440,14 @@ function renderKickList() {
   if (!state.kicks.length) { wrap.hidden = true; return; }
   wrap.hidden = false;
   $('kickCount').textContent = state.kicks.length;
+  // cp-15-secmeli-menu: otomatik mod/açı sütunu kaldırıldı (ürün kararı 1 ve 5). "kv" (açı) bilgi
+  // amaçlı kalıyor — classifyView'ın videodan tahmini, hiçbir seçimi sürmüyor, sadece kullanıcı
+  // hangi açıyı seçeceğine karar verirken (ya da viewWarning ile karşılaştırırken) bir ipucu.
   $('kickRows').innerHTML = state.kicks.map((k, i) => `
     <div class="kickRow ${state.activeKick === k ? 'active' : ''}" data-i="${i}">
       <span class="kt">${fmtTime(k.t)}</span>
       <span class="kf">${FOOT_LABEL[k.foot]}</span>
       <span class="kv" title="${k.view.reason}">${VIEW_LABEL[k.view.view]}</span>
-      <span class="km">${k.suggestion.mode ? MODE_TITLE[k.suggestion.mode] : k.suggestion.note}</span>
       <span class="ks">${k.score !== null ? k.score : '—'}</span>
     </div>`).join('');
   for (const row of wrap.querySelectorAll('.kickRow')) {
@@ -462,6 +465,10 @@ function runAnalysis() {
   if (state.contact === null || !state.ball || !state.track) return;
   const mode = effectiveMode();
   const foot = effectiveFoot();
+  const angle = effectiveView();
+  // cp-15-secmeli-menu: üçü de (açı, vuruş türü, ayak) seçilmeden analiz çalışmaz — "analyze"
+  // butonu zaten disabled ama mod/ayak/açı değişince buradan da tekrar çağrılıyor (bkz. olay dinleyicileri).
+  if (!mode || !foot || !angle) return;
   try {
     let res;
     if (state.activeKick) {
@@ -477,7 +484,7 @@ function runAnalysis() {
       res = evaluate(m, mode);
     }
     if (state.activeKick) { state.activeKick.score = res.total; renderKickList(); }
-    renderReport(res, mode, viewWarning(mode));
+    renderReport(res, mode, viewWarning(angle));
   } catch (err) { setStatus(err.message); }
 }
 

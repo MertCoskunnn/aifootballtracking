@@ -19,24 +19,31 @@
         <span>Video seç</span>
       </label>
       <div class="row">
-        <label>Hareket
+        <label>Açı
+          <select id="view">
+            <option value="" selected disabled>Seç...</option>
+            <option value="side">Yandan</option>
+            <option value="behind">Arkadan</option>
+          </select>
+        </label>
+        <label>Vuruş türü
           <select id="mode">
-            <option value="auto">Otomatik</option>
-            <option value="shot">Şut (ayak üstü)</option>
-            <option value="placement">Plase (iç taraf, yerleştirme)</option>
+            <option value="" selected disabled>Seç...</option>
+            <option value="shot">Ayak üstü şut</option>
+            <option value="placement">Plase (iç taraf, koşarken)</option>
             <option value="pass">Pas (iç taraf)</option>
             <option value="freekick">Frikik / falsolu</option>
           </select>
         </label>
         <label>Vuran ayak
           <select id="foot">
-            <option value="auto">Otomatik</option>
+            <option value="" selected disabled>Seç...</option>
             <option value="right">Sağ</option>
             <option value="left">Sol</option>
           </select>
         </label>
       </div>
-      <p class="hint" id="setupHint">Videoyu yükle, hoca vuruşu ve kamera açısını kendisi bulsun.</p>
+      <p class="hint" id="setupHint">Açıyı, vuruş türünü ve ayağı seç. Sonra videoyu yükle: hoca vuruş anını ve topu kendisi bulur, temas karesini istersen elle düzeltebilirsin.</p>
     </section>
 
     <section class="panel stage-wrap" id="stageWrap" hidden>

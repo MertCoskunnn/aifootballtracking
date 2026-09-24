@@ -146,7 +146,11 @@ async function processEntry(entry, cache, tol) {
       const d = Math.abs(k.t - entry.expected.tSec);
       if (d < bestDiff) { best = k; bestDiff = d; }
     }
-    const a = pipeline.analyzeKick(best, { mode: 'auto', foot: 'auto' });
+    // cp-15-secmeli-menu: uygulamada artık "Otomatik" mod/ayak yok, kullanıcı üçünü de (açı, tür,
+    // ayak) kendi seçiyor. Regresyon sayfası da aynı akışı yansıtsın diye beklenen.json'daki
+    // mod/ayak değerlerini DOĞRUDAN veriyor — pipeline.analyzeKick'in kendi 'auto' tahmini
+    // (suggestion.mode / kick.foot) burada artık kullanılmıyor.
+    const a = pipeline.analyzeKick(best, { mode: entry.expected.mode, foot: entry.expected.foot });
     const cmp = withinTolerance({ tSec: best.t, score: a.result.total }, entry.expected, tol);
     return {
       id: entry.id, label: entry.label, file: filename,
