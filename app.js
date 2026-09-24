@@ -15,7 +15,7 @@
 import * as pipeline from './pipeline.js?v=27';
 import { measure, measureFreeKick, buildTrack } from './metrics.js?v=27';
 import { evaluate } from './coach.js?v=27';
-import { ballFlight, fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=27';
+import { fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=27';
 import { getRuleSet } from './rules.js?v=27';
 import { pickTrackedPerson, pickDisplayBall, pickLiveDisplay, nearestBallWidth } from './display.js?v=27';
 
@@ -307,13 +307,14 @@ function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   const s = canvas.width / 400; // çizgi kalınlığı videonun boyutuna göre
   const f = state.frames[state.index];
-  ensureFlight(); // eğri (state.fit) + yedek kare-tabanlı yol (state.flight), hem iz hem tek-top seçimi için
+  ensureFlight(); // eğri (state.fit) — hem izin hem temas-sonrası tek-top seçiminin TEK kaynağı
   if (state.track) {
     const main = pickTrackedPerson(state.track, state.index);
     if (main) drawPose(main, s, true); // track o karede kayıpsa (null) hiç iskelet çizilmez, başkasına atlanmaz
     // cp-19: nişangahın konumu artık ZAMANA göre (currentT), kare indeksine göre değil — oynatırken
-    // akıcı hareket etsin diye (bkz. currentT, pickDisplayBall).
-    const ball = pickDisplayBall(f, state.index, state.contact, state.ball, currentT(), state.fit, flightPointAt(state.index));
+    // akıcı hareket etsin diye (bkz. currentT, pickDisplayBall). cp-20: fit yoksa pickDisplayBall zaten
+    // null döner (temas sonrası "iz yok" — eski kare-tabanlı yedek kaldırıldı, bkz. display.js).
+    const ball = pickDisplayBall(f, state.index, state.contact, state.ball, currentT(), state.fit);
     if (ball) drawBallMarker(ball, s, state.index === state.contact);
   } else {
     // Henüz oyuncu/top seçilmedi (elle işaretleme akışının başı): kullanıcı doğru kişiyi/topu
@@ -337,29 +338,29 @@ function currentT() {
   return state.frames[state.index]?.t ?? 0;
 }
 
-// Temas/top değişince bir kez: hem YENİ (zaman-tabanlı, sağlam) eğriyi hem ESKİ (kare-tabanlı,
-// yalnızca fit kurulamazsa kullanılan yedek) yolu hesaplar.
-// - state.fit: trajectory.js#fitFlight — RANSAC + ağırlıklı en küçük kareler, temas civarındaki
-//   TÜM top adayları (collectCandidates) + kullanıcının işaretlediği temas noktası üstüne kurulur.
-//   Bu, drawFlight()'ın çizdiği iz VE pickDisplayBall'ın temas-sonrası nişangah konumu için kullanılır.
-// - state.flight: eski ballFlight çıktısı, sadece fit null dönerse (çok az/dağınık veri) nişangah
-//   için yedek konum kaynağı olarak kalıyor ("fit yoksa eski davranış").
+// Temas/top değişince bir kez: sağlam eğriyi (state.fit) hesaplar — hem drawFlight()'ın çizdiği iz
+// HEM pickDisplayBall'ın temas-sonrası tek-top seçiminin TEK kaynağı budur (cp-20: eski kare-tabanlı
+// ballFlight yedeği kaldırıldı, bkz. display.js cp-20 notu — o yedek gerçek raporda nişangahı yerde
+// duran başka bir topa atlatıyordu).
+// state.fit: trajectory.js#fitFlight — RANSAC + ağırlıklı en küçük kareler, temas civarındaki TÜM
+// top adayları (collectCandidates) + kullanıcının işaretlediği temas noktası üstüne kurulur.
 function ensureFlight() {
-  if (state.contact === null || !state.ball) { state.fit = null; state.flight = null; state.flightKey = null; return; }
+  if (state.contact === null || !state.ball) { state.fit = null; state.flightKey = null; return; }
   const key = `${state.contact}:${state.ball.x}:${state.ball.y}:${state.frames.length}`;
   if (state.flightKey === key) return;
   state.flightKey = key;
-  state.flight = ballFlight(state.frames, state.contact, state.ball, canvas.width * 0.12);
   const contactFrame = state.frames[state.contact];
   const contactT = contactFrame?.t ?? 0;
-  const cands = collectCandidates(state.frames, state.contact, 1.2);
+  // cp-20-sabit-top: contactAnchor verilince collectCandidates, temas ÖNCESİ sahnede duran (temas
+  // topunun kendisi olmayan) top kümelerini bulup temas SONRASI adaylardan bunlara yakın olanları
+  // eler — RANSAC'ın kalabalık/antrenman sahnesindeki yerde duran başka bir topa kilitlenmesini önler.
+  const cands = collectCandidates(state.frames, state.contact, 1.2, { contactAnchor: state.ball });
   // Temas karesinde top genelde ayağın arkasında kaybolur (ham tespit yok/güvenilmez); kullanıcının
   // işaretlediği (ya da otomatik bulunan) gerçek temas noktasını da adaylara ekliyoruz — fitFlight
   // bunu ANCOR olarak ağırlıklı tutuyor (bkz. trajectory.js ANCHOR_WEIGHT).
   cands.push({ t: contactT, x: state.ball.x, y: state.ball.y, w: state.ball.w ?? nearestBallWidth(contactFrame, state.ball) });
   state.fit = fitFlight(cands, contactT);
 }
-const flightPointAt = (i) => state.flight?.find((p) => p.i === i) || null;
 
 // Şut çizgisi (FIFA replay hissi, abartısız): en altta temastan şu ana kadarki İNCE SOLUK tam yol
 // (flightPath, beyaz, alpha 0.25) — "geçmiş iz". Üstünde, topun hemen gerisinde sönerek incelen bir

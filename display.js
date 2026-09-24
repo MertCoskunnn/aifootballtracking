@@ -12,8 +12,13 @@
 // cp-19-sut-izi-animasyon: temas SONRASI top artık kare-kare ham tespitten değil, trajectory.js'in
 // oturttuğu sağlam eğriden (fit, RANSAC + ağırlıklı en küçük kareler) okunuyor. Ham tespitler 25-30
 // fps'te zıplıyor (top bulanık ya da bir kare kayıp); fit sürekli bir eğri olduğu için nişangah
-// akıcı hareket eder, tek bir kötü tespit onu oynatmaz. fit kurulamadıysa (çok az/dağınık veri) eski
-// kare-tabanlı davranışa (flightPointFallback) düşülür.
+// akıcı hareket eder, tek bir kötü tespit onu oynatmaz.
+// cp-20-sabit-top bug düzeltmesi: fit kurulamadığında ESKİ kare-tabanlı yedeğe (ballFlight'ın "en
+// yakın tespit" yol izleme çıktısı) artık düşülMÜYOR — gerçek raporda bu yedek, temas sonrası
+// nişangahı yerde duran başka bir topa atlatıyordu (fitFlight'ın tam da dışladığı/reddettiği
+// sabit-top durumunu, eski yol hiç süzmeden alıyordu). Artık kural net: temas SONRASI nişangah
+// YALNIZ geçerli bir fit'ten gelir; fit yoksa (RANSAC yetersiz/güvenilmez veri yüzünden kuramadıysa
+// ya da sabit-top şüphesiyle reddettiyse) hiçbir top gösterilmez — "belirsiz ama yanlış" yerine "yok".
 import { flightAt } from './trajectory.js?v=27';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -41,28 +46,38 @@ export function pickTrackedPerson(track, index) {
  * ballAnchor: temas anındaki (elle ya da otomatik işaretlenen) top konumu {x,y,w?} ya da null.
  * t: nişangahın çizileceği ZAMAN (video.currentTime oynatırken, kare t'si durdurulmuşken — cp-19,
  *   app.js#currentT). Sadece temas SONRASI fit varsa kullanılır, kare indeksinden bağımsızdır.
- * fit: trajectory.js#fitFlight çıktısı ya da null (RANSAC yetersiz veri yüzünden kuramadıysa).
- * flightPointFallback: fit YOKSA kullanılan eski (kare tabanlı) nokta — trajectory.js#ballFlight
- *   çıktısından bu kareye denk gelen nokta ({i,x,y}) ya da null (çağıran taraf bulur).
+ * fit: trajectory.js#fitFlight çıktısı ya da null (RANSAC yetersiz/güvenilmez veri yüzünden
+ *   kuramadıysa, ya da sabit-top şüphesiyle bilerek reddettiyse — bkz. trajectory.js cp-20).
  *
  * Kural (Mert'in isteği): temas KARESİNDE işaretlenen top gösterilir; temastan ÖNCEKİ karelerde
  * o karenin ham tespitlerinden ankor'a EN YAKIN olanı (top kare kare kaydığı için en iyi proxy);
- * temastan SONRA fit varsa eğri üzerindeki `t` anındaki nokta (flightAt) — ham tespitlerin
- * zıplaması nişangahı OYNATMAZ; fit yoksa eski kare-tabanlı yönteme (flightPointFallback) düşülür,
- * o da yoksa (yol o karede topu bulamadıysa) hiçbir top gösterilmez, başka bir tespite atlanmaz.
+ * temastan SONRA YALNIZ fit varsa eğri üzerindeki `t` anındaki nokta (flightAt) gösterilir — ham
+ * tespitlerin zıplaması nişangahı OYNATMAZ. fit yoksa (cp-20) hiçbir top gösterilmez: eski kare-
+ * tabanlı yedek (ballFlight'ın "en yakın tespit" izlemesi) kaldırıldı, çünkü tam da fitFlight'ın
+ * güvensiz bulup reddettiği durumlarda (ör. sahada duran başka bir topa kilitlenme) süzmeden o
+ * yanlış tespiti gösteriyordu. Belirsizlikte hiçbir tespite atlanmaz.
  * Dönen: {x,y,w} biçiminde tek top ya da null.
  */
-export function pickDisplayBall(frame, index, contact, ballAnchor, t, fit, flightPointFallback) {
+export function pickDisplayBall(frame, index, contact, ballAnchor, t, fit) {
   if (contact === null || !ballAnchor) return null;
-  const w = ballAnchor.w ?? nearestBallWidth(frame, ballAnchor);
-  if (index === contact) return { x: ballAnchor.x, y: ballAnchor.y, w };
+  if (index === contact) {
+    const w = ballAnchor.w ?? nearestBallWidth(frame, ballAnchor);
+    return { x: ballAnchor.x, y: ballAnchor.y, w };
+  }
   if (index > contact) {
-    if (fit) {
-      const clampedT = Math.min(t, fit.tEnd + FIT_EXTEND_SEC);
-      const { x, y } = flightAt(fit, clampedT);
-      return { x, y, w };
-    }
-    return flightPointFallback || null;
+    if (!fit) return null; // cp-20: fit yoksa temas sonrası nişangah çizilmez, eski yedeğe düşülmez
+    const clampedT = Math.min(t, fit.tEnd + FIT_EXTEND_SEC);
+    const { x, y } = flightAt(fit, clampedT);
+    // cp-20-nisangah-boyutu bug düzeltmesi: genişlik eskiden HER ZAMAN ankor'a (temas anındaki
+    // ESKİ konuma) en yakın ham tespitten ödünç alınıyordu — ama top uçtukça bu konumdan çok
+    // uzaklaşır, o yüzden "ankor'a en yakın" artık alakasız bir tespiti (ör. yerde duran başka
+    // top, bir oyuncu kutusu) yakalayabiliyordu ve nişangah gerçek boyutundan kat kat büyük/küçük
+    // çiziliyordu. Genişlik artık topun O ANKİ (fit'in öngördüğü x,y) konumuna göre aranır; ayrıca
+    // bir mesafe tavanı var (ankor genişliğinin ~3 katı) — o kadar yakında hiçbir tespit yoksa
+    // (top o karede bulunamamış) rastgele uzak bir tespite atlamak yerine ankor genişliğine düşülür.
+    const cap = Math.max(60, (ballAnchor.w || 16) * 3);
+    const w = ballAnchor.w ?? nearestBallWidth(frame, { x, y }, cap) ?? 16;
+    return { x, y, w };
   }
   const cands = (frame?.balls || []).filter((b) => b.w > 0);
   if (!cands.length) return null;
@@ -70,23 +85,27 @@ export function pickDisplayBall(frame, index, contact, ballAnchor, t, fit, fligh
 }
 
 // Temas topu genelde sadece {x,y} taşır (genişlik bilgisi yok, elle işaretlemede hiç ölçülmedi).
-// Nişangahı doğru boyutlandırmak için o karedeki ham tespitlerden ankor'a en yakın olanın w'sini
-// ödünç alırız; hiç tespit yoksa makul bir varsayılana (16 piksel) düşülür. app.js da fit'e eklenen
-// temas noktasının genişliğini bulmak için bunu kullanıyor (cp-19).
-export function nearestBallWidth(frame, point) {
+// Nişangahı doğru boyutlandırmak için o karedeki ham tespitlerden VERİLEN NOKTAYA (point) en yakın
+// olanın w'sini ödünç alırız; hiç tespit yoksa (ya da hepsi maxDist'ten uzaksa) null döner, çağıran
+// taraf kendi varsayılanına düşer. app.js da fit'e eklenen temas noktasının genişliğini bulmak için
+// bunu kullanıyor (cp-19). point, "şu an topun nerede olduğu"nu temsil etmeli — temas SONRASI için
+// eski/sabit bir ankor konumu DEĞİL, güncel (fit'in öngördüğü) konum verilmeli (cp-20, bkz. yukarısı).
+export function nearestBallWidth(frame, point, maxDist = Infinity) {
   const cands = (frame?.balls || []).filter((b) => b.w > 0);
   if (!cands.length) return 16;
-  return cands.reduce((a, b) => (dist(b, point) < dist(a, point) ? b : a)).w;
+  const nearest = cands.reduce((a, b) => (dist(b, point) < dist(a, point) ? b : a));
+  if (dist(nearest, point) > maxDist) return null;
+  return nearest.w;
 }
 
 /**
  * Tek bir çağrıda hem oyuncu hem top seçimi (app.js draw()'ın kullandığı kısayol).
  * Dönen: { person, ball } — ikisi de yukarıdaki fonksiyonların dönüşü, ikisi de null olabilir.
  */
-export function pickDisplay(frame, index, track, contact, ballAnchor, t, fit, flightPointFallback) {
+export function pickDisplay(frame, index, track, contact, ballAnchor, t, fit) {
   return {
     person: pickTrackedPerson(track, index),
-    ball: pickDisplayBall(frame, index, contact, ballAnchor, t, fit, flightPointFallback),
+    ball: pickDisplayBall(frame, index, contact, ballAnchor, t, fit),
   };
 }
 

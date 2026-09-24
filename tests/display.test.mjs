@@ -30,7 +30,7 @@ test('pickTrackedPerson: track o karede varsa onu döner', () => {
 });
 
 // === 2. pickDisplayBall ===
-// İmza (cp-19): pickDisplayBall(frame, index, contact, ballAnchor, t, fit, flightPointFallback)
+// İmza (cp-19, cp-20'de flightPointFallback kaldırıldı): pickDisplayBall(frame, index, contact, ballAnchor, t, fit)
 
 test('pickDisplayBall: contact null ya da ankor yoksa null döner', () => {
   const frame = { balls: [ball(10, 10)] };
@@ -107,17 +107,48 @@ test('pickDisplayBall: fit tEnd\'i aşan t, en fazla FIT_EXTEND_SEC (0.5sn) kada
   assert.ok(Math.abs(farBeyond.y - clampedExpected.y) < 1e-9, 'y, tEnd+0.5 ile aynı olmalı (kırpılmış)');
 });
 
-test('pickDisplayBall: fit YOKSA temas sonrası eski (kare tabanlı) flightPointFallback kullanılır', () => {
-  const anchor = { x: 100, y: 100 };
-  const frame = { balls: [ball(999, 999, 50)] }; // flight'ta olmayan, alakasız bir tespit
-  const flightPointFallback = { i: 8, x: 130, y: 90 };
-  const res = pickDisplayBall(frame, 8, 5, anchor, 5.2, null, flightPointFallback); // fit: null
-  assert.deepEqual(res, flightPointFallback);
+// cp-20-nisangah-boyutu bug düzeltmesi: genişlik (w) ankor.w yoksa artık topun O ANKİ (fit'in
+// öngördüğü) konumuna göre aranır — eski koddaki hata, genişliği HER ZAMAN temas anındaki (artık
+// çok eski/uzak) ankor konumuna göre arıyordu, top uçtukça bu "en yakın" araması alakasız bir
+// tespite (ör. yerde duran başka top) kayabiliyor, nişangah gerçek boyutundan kat kat büyük/küçük
+// çiziliyordu (gerçek bug raporu: yarıçap ~3 top çapı).
+test('pickDisplayBall: genişlik (w) güncel fit konumuna yakın tespitten alınır, eski/uzak ankor konumundaki tespitten DEĞİL', () => {
+  const fit = { contactT: 5, tEnd: 6, coef: { x0: 100, vx: 200, ax: 0, y0: 200, vy: 0, ay: 0 } }; // t=5.5 -> x=200,y=200
+  const anchor = { x: 100, y: 200 }; // w YOK (elle işaretleme, cp-19 senaryosu)
+  const t = 5.5;
+  const frame = {
+    balls: [
+      { x: 100, y: 200, w: 60 }, // eski ankor konumunda duran BAŞKA top (ör. yerde duran top) — yanlış kaynak
+      { x: 205, y: 200, w: 18 }, // topun O ANKİ (fit'in öngördüğü ~200,200) konumuna yakın gerçek tespit
+    ],
+  };
+  const res = pickDisplayBall(frame, 8, 5, anchor, t, fit);
+  assert.equal(res.w, 18, 'genişlik güncel konuma yakın tespitten alınmalı, eski ankor konumundaki büyük tespitten değil');
 });
 
-test('pickDisplayBall: fit YOK ve flightPointFallback de YOKSA (kayıp kare) null döner, başka bir tespite atlanmaz', () => {
+test('pickDisplayBall: genişlik için güncel konumda hiçbir tespit yoksa (mesafe tavanı aşılırsa) makul varsayılana düşer, uzak bir tespite atlamaz', () => {
+  const fit = { contactT: 5, tEnd: 6, coef: { x0: 100, vx: 200, ax: 0, y0: 200, vy: 0, ay: 0 } };
+  const anchorNoW = { x: 100, y: 200 }; // w YOK: mesafe tavanını test etmek için
+  const t = 5.5; // beklenen konum ~ (200,200)
+  const frameFar = { balls: [{ x: 900, y: 900, w: 77 }] }; // fit konumundan ÇOK uzak, tavanı aşar
+  const res = pickDisplayBall(frameFar, 8, 5, anchorNoW, t, fit);
+  assert.equal(res.w, 16, 'yakında güvenilir tespit yoksa makul varsayılana (16) düşmeli, uzak/alakasız tespite değil');
+});
+
+// cp-20-sabit-top bug düzeltmesi: eski kare-tabanlı yedek (flightPointFallback) TAMAMEN kaldırıldı.
+// Gerçek bug raporunda bu yedek, fitFlight'ın tam da güvensiz bulup reddettiği durumda (sahada duran
+// başka bir topa kilitlenme şüphesi) süzmeden o yanlış tespiti gösteriyordu. Artık kural net: fit
+// yoksa temas sonrası HİÇBİR top gösterilmez, başka bir tespite (ne kadar "yakın" olursa olsun) atlanmaz.
+test('pickDisplayBall: fit YOKSA temas sonrası hiçbir top gösterilmez (eski kare-tabanlı yedek kaldırıldı)', () => {
+  const anchor = { x: 100, y: 100 };
+  const frame = { balls: [ball(999, 999, 50)] }; // alakasız bir ham tespit, buna da atlanmamalı
+  const res = pickDisplayBall(frame, 8, 5, anchor, 5.2, null); // fit: null
+  assert.equal(res, null);
+});
+
+test('pickDisplayBall: fit YOKSA (kayıp/güvenilmez veri) null döner, başka bir tespite atlanmaz', () => {
   const frame = { balls: [ball(999, 999, 50)] };
-  const res = pickDisplayBall(frame, 9, 5, { x: 100, y: 100 }, 5.3, null, null);
+  const res = pickDisplayBall(frame, 9, 5, { x: 100, y: 100 }, 5.3, null);
   assert.equal(res, null);
 });
 
