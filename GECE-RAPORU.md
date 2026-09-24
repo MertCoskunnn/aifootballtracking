@@ -34,3 +34,7 @@
 - Senin videolarınla cp-14 kalibrasyonu: plase ve hareketli top eşikleri [T] olarak duruyor.
 - PL4 (plasede diz hızı oranı) ölçümü dağılıyor (28 ile 1257 arası), tanımı düzeltilmeli.
 - Hız: tarayıcıda kare başına ~1 sn. Uzun videolar için "oynatarak işleme" (PRODUCT-PLAN'daki hız maddesi).
+
+## Sabah eki (Mert'in denemesi)
+- **Yeni hata:** arada bir bulutların orada iskelet beliriyor. Muhtemel sebep: nesne modeli bulutu kişi sanıyor, MoveNet yedeği kabul ediyor. Çözüm planı: anatomi + zemin hizası + süreklilik kontrolü, eşikler 0.5/0.45. Hangi video/saniye olduğu bekleniyor.
+- Sıra: bulut iskeleti → açı tespiti v2 → vuruş bulma → hız → 60 fps.
