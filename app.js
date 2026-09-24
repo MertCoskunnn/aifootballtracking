@@ -15,9 +15,9 @@
 import * as pipeline from './pipeline.js?v=26';
 import { measure, measureFreeKick, buildTrack } from './metrics.js?v=26';
 import { evaluate } from './coach.js?v=26';
-import { ballFlight } from './trajectory.js?v=26';
+import { ballFlight, fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=26';
 import { getRuleSet } from './rules.js?v=26';
-import { pickTrackedPerson, pickDisplayBall, pickLiveDisplay } from './display.js?v=26';
+import { pickTrackedPerson, pickDisplayBall, pickLiveDisplay, nearestBallWidth } from './display.js?v=26';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');
@@ -307,11 +307,13 @@ function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   const s = canvas.width / 400; // çizgi kalınlığı videonun boyutuna göre
   const f = state.frames[state.index];
-  ensureFlight(); // ballFlight, hem şut çizgisi hem de temas-sonrası tek-top seçimi için gerekli
+  ensureFlight(); // eğri (state.fit) + yedek kare-tabanlı yol (state.flight), hem iz hem tek-top seçimi için
   if (state.track) {
     const main = pickTrackedPerson(state.track, state.index);
     if (main) drawPose(main, s, true); // track o karede kayıpsa (null) hiç iskelet çizilmez, başkasına atlanmaz
-    const ball = pickDisplayBall(f, state.index, state.contact, state.ball, flightPointAt(state.index));
+    // cp-19: nişangahın konumu artık ZAMANA göre (currentT), kare indeksine göre değil — oynatırken
+    // akıcı hareket etsin diye (bkz. currentT, pickDisplayBall).
+    const ball = pickDisplayBall(f, state.index, state.contact, state.ball, currentT(), state.fit, flightPointAt(state.index));
     if (ball) drawBallMarker(ball, s, state.index === state.contact);
   } else {
     // Henüz oyuncu/top seçilmedi (elle işaretleme akışının başı): kullanıcı doğru kişiyi/topu
@@ -326,36 +328,74 @@ function draw() {
   }
 }
 
-// state.flight'ı (temastan sonra topun izlediği yol) temas/top değişince bir kez hesaplar.
-// draw() hem şut çizgisini çizmek hem de temas-sonrası tek-top seçimini (pickDisplayBall) yapmak
-// için buna ihtiyaç duyuyor, bu yüzden hesaplama drawFlight()'tan buraya taşındı (cp-18).
+// cp-19-sut-izi-animasyon: iz artık KARE indeksinden değil, VİDEO ZAMANINDAN sürülüyor — oynatırken
+// video.currentTime (her rAF tikinde followPlayback→syncToVideo→draw zaten çalışıyor, 60 Hz'e yakın),
+// durdurulmuşken o anki karenin gerçek t'si. Böylece 25-30 fps'te örneklenen tespitler arasında
+// "akan" bir çizgi/nişangah elde ederiz, kare kare zıplamaz.
+function currentT() {
+  if (!video.paused && Number.isFinite(video.currentTime)) return video.currentTime;
+  return state.frames[state.index]?.t ?? 0;
+}
+
+// Temas/top değişince bir kez: hem YENİ (zaman-tabanlı, sağlam) eğriyi hem ESKİ (kare-tabanlı,
+// yalnızca fit kurulamazsa kullanılan yedek) yolu hesaplar.
+// - state.fit: trajectory.js#fitFlight — RANSAC + ağırlıklı en küçük kareler, temas civarındaki
+//   TÜM top adayları (collectCandidates) + kullanıcının işaretlediği temas noktası üstüne kurulur.
+//   Bu, drawFlight()'ın çizdiği iz VE pickDisplayBall'ın temas-sonrası nişangah konumu için kullanılır.
+// - state.flight: eski ballFlight çıktısı, sadece fit null dönerse (çok az/dağınık veri) nişangah
+//   için yedek konum kaynağı olarak kalıyor ("fit yoksa eski davranış").
 function ensureFlight() {
-  if (state.contact === null || !state.ball) { state.flight = null; state.flightKey = null; return; }
+  if (state.contact === null || !state.ball) { state.fit = null; state.flight = null; state.flightKey = null; return; }
   const key = `${state.contact}:${state.ball.x}:${state.ball.y}:${state.frames.length}`;
-  if (state.flightKey !== key) {
-    state.flight = ballFlight(state.frames, state.contact, state.ball, canvas.width * 0.12);
-    state.flightKey = key;
-  }
+  if (state.flightKey === key) return;
+  state.flightKey = key;
+  state.flight = ballFlight(state.frames, state.contact, state.ball, canvas.width * 0.12);
+  const contactFrame = state.frames[state.contact];
+  const contactT = contactFrame?.t ?? 0;
+  const cands = collectCandidates(state.frames, state.contact, 1.2);
+  // Temas karesinde top genelde ayağın arkasında kaybolur (ham tespit yok/güvenilmez); kullanıcının
+  // işaretlediği (ya da otomatik bulunan) gerçek temas noktasını da adaylara ekliyoruz — fitFlight
+  // bunu ANCOR olarak ağırlıklı tutuyor (bkz. trajectory.js ANCHOR_WEIGHT).
+  cands.push({ t: contactT, x: state.ball.x, y: state.ball.y, w: state.ball.w ?? nearestBallWidth(contactFrame, state.ball) });
+  state.fit = fitFlight(cands, contactT);
 }
 const flightPointAt = (i) => state.flight?.find((p) => p.i === i) || null;
 
-// Şut çizgisi: temastan sonra topun izlediği yol, o ana kadar olan kısmı (oyunlardaki gibi).
+// Şut çizgisi (FIFA replay hissi, abartısız): en altta temastan şu ana kadarki İNCE SOLUK tam yol
+// (flightPath, beyaz, alpha 0.25) — "geçmiş iz". Üstünde, topun hemen gerisinde sönerek incelen bir
+// KUYRUK (flightTrail): her segment kendi alpha/width'iyle — önce geniş düşük-alfa turuncu parıltı,
+// üstüne açık sarı-beyaz çekirdek. state.fit yoksa (RANSAC yetersiz veri yüzünden kuramadıysa) hiçbir
+// şey çizilmez (eskiden ballFlight+Bezier ile "kırık da olsa bir şey" çizerdi, artık ya sağlam ya hiç).
 function drawFlight(s) {
-  if (state.contact === null || !state.ball || state.index <= state.contact || !state.flight) return;
-  const pts = state.flight.filter((p) => p.i <= state.index);
-  if (pts.length < 2) return;
+  if (!state.fit) return;
+  const tNow = currentT();
+  if (tNow <= state.fit.contactT) return;
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  // Önce geniş yarı saydam parıltı, sonra ince parlak çekirdek
-  for (const [w, color, a] of [[10, '#ffb547', 0.25], [3, '#fff3d6', 1]]) {
-    ctx.globalAlpha = a; ctx.strokeStyle = color; ctx.lineWidth = w * s;
-    ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
-    // Noktalar arası yumuşak eğri (orta noktalardan geçen ikinci derece Bezier)
-    for (let k = 1; k < pts.length - 1; k++) {
-      const mx = (pts[k].x + pts[k + 1].x) / 2, my = (pts[k].y + pts[k + 1].y) / 2;
-      ctx.quadraticCurveTo(pts[k].x, pts[k].y, mx, my);
-    }
-    ctx.lineTo(pts.at(-1).x, pts.at(-1).y);
+
+  const path = flightPath(state.fit, tNow);
+  if (path.length >= 2) {
+    ctx.globalAlpha = 0.25; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2 * s;
+    ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y);
+    for (let k = 1; k < path.length; k++) ctx.lineTo(path[k].x, path[k].y);
     ctx.stroke();
+  }
+
+  const trail = flightTrail(state.fit, tNow);
+  if (trail.length >= 2) {
+    // Alt katman: geniş, düşük alfa turuncu parıltı — kuyrukla birlikte incelip söner
+    for (let k = 1; k < trail.length; k++) {
+      ctx.globalAlpha = trail[k].alpha * 0.35;
+      ctx.strokeStyle = '#ffb547';
+      ctx.lineWidth = (trail[k].width + 5) * s;
+      ctx.beginPath(); ctx.moveTo(trail[k - 1].x, trail[k - 1].y); ctx.lineTo(trail[k].x, trail[k].y); ctx.stroke();
+    }
+    // Üst katman: açık sarı-beyaz çekirdek
+    for (let k = 1; k < trail.length; k++) {
+      ctx.globalAlpha = trail[k].alpha;
+      ctx.strokeStyle = '#fff3d6';
+      ctx.lineWidth = trail[k].width * s;
+      ctx.beginPath(); ctx.moveTo(trail[k - 1].x, trail[k - 1].y); ctx.lineTo(trail[k].x, trail[k].y); ctx.stroke();
+    }
   }
   ctx.globalAlpha = 1;
 }

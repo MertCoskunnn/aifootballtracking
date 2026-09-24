@@ -1,9 +1,12 @@
 // tests/display.test.mjs — cp-18-tek-oyuncu-tek-top: ekranda SADECE vuran oyuncu, SADECE vurulan
 // top gösterme mantığı (display.js). Mert'in isteği: kaleci/yan çizgideki kişiler ve yerdeki başka
-// toplar artık çizilmemeli. Saf fonksiyonlar, canvas gerekmez.
+// toplar artık çizilmemeli. cp-19-sut-izi-animasyon: temas sonrası top artık trajectory.js#fitFlight
+// eğrisinden (flightAt) okunuyor, ham tespit zıplaması nişangahı oynatmıyor. Saf fonksiyonlar,
+// canvas gerekmez.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { pickTrackedPerson, pickDisplayBall, pickDisplay, pickLiveDisplay } from '../display.js';
+import { flightAt } from '../trajectory.js';
 
 // --- yardımcı: sahte "kişi" ve "top" nesneleri ---
 const person = (tag) => ({ tag }); // pickTrackedPerson içerik umursamıyor, referans eşitliği yeterli
@@ -27,17 +30,18 @@ test('pickTrackedPerson: track o karede varsa onu döner', () => {
 });
 
 // === 2. pickDisplayBall ===
+// İmza (cp-19): pickDisplayBall(frame, index, contact, ballAnchor, t, fit, flightPointFallback)
 
 test('pickDisplayBall: contact null ya da ankor yoksa null döner', () => {
   const frame = { balls: [ball(10, 10)] };
-  assert.equal(pickDisplayBall(frame, 5, null, ball(10, 10), null), null);
-  assert.equal(pickDisplayBall(frame, 5, 5, null, null), null);
+  assert.equal(pickDisplayBall(frame, 5, null, ball(10, 10), 0, null, null), null);
+  assert.equal(pickDisplayBall(frame, 5, 5, null, 0, null, null), null);
 });
 
 test('pickDisplayBall: temas karesinde ankoru döner, w yoksa en yakın ham tespitten ödünç alır', () => {
   const frame = { balls: [ball(500, 500, 99), ball(101, 101, 30)] }; // ikinci tespit ankora yakın
   const anchor = { x: 100, y: 100 }; // w yok
-  const res = pickDisplayBall(frame, 5, 5, anchor, null);
+  const res = pickDisplayBall(frame, 5, 5, anchor, 0, null, null);
   assert.equal(res.x, 100);
   assert.equal(res.y, 100);
   assert.equal(res.w, 30, 'en yakın ham tespitin (101,101,w=30) genişliği ödünç alınmalı');
@@ -46,13 +50,13 @@ test('pickDisplayBall: temas karesinde ankoru döner, w yoksa en yakın ham tesp
 test('pickDisplayBall: temas karesinde ankorun kendi w\'si varsa onu kullanır (tahmine gerek yok)', () => {
   const frame = { balls: [] };
   const anchor = { x: 100, y: 100, w: 22 };
-  const res = pickDisplayBall(frame, 5, 5, anchor, null);
+  const res = pickDisplayBall(frame, 5, 5, anchor, 0, null, null);
   assert.equal(res.w, 22);
 });
 
 test('pickDisplayBall: hiç ham tespit yoksa temas karesinde varsayılan genişliğe (16) düşer', () => {
   const frame = { balls: [] };
-  const res = pickDisplayBall(frame, 5, 5, { x: 100, y: 100 }, null);
+  const res = pickDisplayBall(frame, 5, 5, { x: 100, y: 100 }, 0, null, null);
   assert.equal(res.w, 16);
 });
 
@@ -61,26 +65,59 @@ test('pickDisplayBall: temastan ÖNCE o karedeki tespitlerden ankora EN YAKIN ol
   const near = ball(105, 100, 18);
   const far = ball(300, 300, 40);
   const frame = { balls: [far, near] };
-  const res = pickDisplayBall(frame, 3, 5, anchor, null); // index(3) < contact(5)
+  const res = pickDisplayBall(frame, 3, 5, anchor, 0, null, null); // index(3) < contact(5)
   assert.equal(res, near);
 });
 
 test('pickDisplayBall: temastan ÖNCE o karede hiç tespit yoksa null döner', () => {
-  const res = pickDisplayBall({ balls: [] }, 3, 5, { x: 100, y: 100 }, null);
+  const res = pickDisplayBall({ balls: [] }, 3, 5, { x: 100, y: 100 }, 0, null, null);
   assert.equal(res, null);
 });
 
-test('pickDisplayBall: temastan SONRA sadece flight noktası döner, ham tespitler yok sayılır', () => {
-  const anchor = { x: 100, y: 100 };
-  const frame = { balls: [ball(999, 999, 50)] }; // flight'ta olmayan, alakasız bir tespit
-  const flightPoint = { i: 8, x: 130, y: 90 };
-  const res = pickDisplayBall(frame, 8, 5, anchor, flightPoint); // index(8) > contact(5)
-  assert.deepEqual(res, flightPoint);
+// --- cp-19: temas SONRASI, fit varsa nişangah eğriden (flightAt) okunur, ham tespit yok sayılır ---
+
+const FIT = { contactT: 5, tEnd: 6, coef: { x0: 100, vx: 40, ax: -5, y0: 200, vy: -60, ay: 30 } };
+
+test('pickDisplayBall: fit varsa temas SONRASI nişangah flightAt(fit,t) konumunu döner, ham tespitler yok sayılır', () => {
+  const anchor = { x: 100, y: 200, w: 24 };
+  const frame = { balls: [ball(999, 999, 50)] }; // alakasız, zıplayan bir ham tespit
+  const t = 5.2; // contactT(5) ile tEnd(6) arası
+  const res = pickDisplayBall(frame, 8, 5, anchor, t, FIT, null);
+  const expected = flightAt(FIT, t);
+  assert.ok(Math.abs(res.x - expected.x) < 1e-9);
+  assert.ok(Math.abs(res.y - expected.y) < 1e-9);
+  assert.equal(res.w, 24, 'nişangah boyutu ankor genişliğini korur');
 });
 
-test('pickDisplayBall: temastan SONRA o kare flight\'ta yoksa (miss) null döner, başka bir tespite atlanmaz', () => {
+test('pickDisplayBall: fit varsa nişangah t\'ye göre SÜREKLİ hareket eder (iki farklı t, iki farklı konum)', () => {
+  const anchor = { x: 100, y: 200, w: 24 };
+  const frame = { balls: [] };
+  const a = pickDisplayBall(frame, 8, 5, anchor, 5.1, FIT, null);
+  const b = pickDisplayBall(frame, 9, 5, anchor, 5.9, FIT, null);
+  assert.notEqual(a.x, b.x);
+  assert.notEqual(a.y, b.y);
+});
+
+test('pickDisplayBall: fit tEnd\'i aşan t, en fazla FIT_EXTEND_SEC (0.5sn) kadar ötesine ekstrapole edilir', () => {
+  const anchor = { x: 100, y: 200, w: 24 };
+  const frame = { balls: [] };
+  const farBeyond = pickDisplayBall(frame, 20, 5, anchor, 50, FIT, null); // tEnd'in çok ötesi
+  const clampedExpected = flightAt(FIT, FIT.tEnd + 0.5);
+  assert.ok(Math.abs(farBeyond.x - clampedExpected.x) < 1e-9, 'x, tEnd+0.5 ile aynı olmalı (kırpılmış)');
+  assert.ok(Math.abs(farBeyond.y - clampedExpected.y) < 1e-9, 'y, tEnd+0.5 ile aynı olmalı (kırpılmış)');
+});
+
+test('pickDisplayBall: fit YOKSA temas sonrası eski (kare tabanlı) flightPointFallback kullanılır', () => {
+  const anchor = { x: 100, y: 100 };
+  const frame = { balls: [ball(999, 999, 50)] }; // flight'ta olmayan, alakasız bir tespit
+  const flightPointFallback = { i: 8, x: 130, y: 90 };
+  const res = pickDisplayBall(frame, 8, 5, anchor, 5.2, null, flightPointFallback); // fit: null
+  assert.deepEqual(res, flightPointFallback);
+});
+
+test('pickDisplayBall: fit YOK ve flightPointFallback de YOKSA (kayıp kare) null döner, başka bir tespite atlanmaz', () => {
   const frame = { balls: [ball(999, 999, 50)] };
-  const res = pickDisplayBall(frame, 9, 5, { x: 100, y: 100 }, null); // flightPoint yok (kayıp kare)
+  const res = pickDisplayBall(frame, 9, 5, { x: 100, y: 100 }, 5.3, null, null);
   assert.equal(res, null);
 });
 
@@ -90,7 +127,7 @@ test('pickDisplay: person ve ball alanlarını birlikte döner', () => {
   const p = person('a');
   const track = [null, p];
   const anchor = { x: 100, y: 100, w: 20 };
-  const res = pickDisplay({ balls: [] }, 1, track, 1, anchor, null);
+  const res = pickDisplay({ balls: [] }, 1, track, 1, anchor, 0, null, null);
   assert.equal(res.person, p);
   assert.equal(res.ball.x, 100);
 });
