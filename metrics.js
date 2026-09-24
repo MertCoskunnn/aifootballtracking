@@ -1,7 +1,7 @@
 // Ölçüm katmanı ("cetvel"): iskelet noktalarından açı ve mesafe hesaplar.
 // Saf fonksiyonlar, tarayıcıya ve MediaPipe'a bağımlı değil, test edilebilir.
 // Koordinatlar piksel cinsinden, y aşağı doğru artar.
-import { findPhases } from './phases.js?v=22';
+import { findPhases } from './phases.js?v=23';
 
 // MediaPipe Pose nokta numaraları
 export const LM = {
@@ -24,6 +24,72 @@ const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 // düşük noktalara bağlı ölçümü hesaplamak yerine NaN döneriz; coach.js bunu "ölçülemedi" gösterir.
 const VIS_MIN = 0.5;
 const visOk = (p, idxs) => idxs.every((i) => (p[i].v ?? 1) >= VIS_MIN);
+
+// cp-14c-makul-aralik: visOk düşük görünürlüğü yakalar ama iskelet YANLIŞ okununca (kamera açısı,
+// düşük çözünürlük, yanlış kişiye kilitlenme) MediaPipe yine de yüksek 'visibility' ile fizyolojik
+// olarak İMKANSIZ bir nokta üretebiliyor. Gerçek veride görülenler (test-videolar/referans/SONUCLAR.md):
+// destek dizi büküşü 117°, gövde açısı -85°, frikikte gövde yana yatışı 94°, destek ayağı topa 1.96
+// bacak boyu uzak. Bunlara göre hoca düzeltme önerince, sahada tek başına çalışan biri için anlamsız
+// bir talimat oluyor. Aralıklar BİLEREK gevşek: amaç sadece imkansızı elemek, kötü tekniği değil —
+// kötü teknik zaten coach.js RULES ideal/tol ile puana yansıyor. [T]: gerçek veri arttıkça kalibre edilir.
+export const PLAUSIBLE = {
+  // Ş2/P1/PL2: destek dizi büküşü. Düz bacaktan (-10°, hafif hiperekstansiyon toleranslı) neredeyse
+  // tam çömelmeye (90°) kadar. Gerçek veride 117° görüldü (anatomik olarak anlamsız) → filtrelenir.
+  supportKnee: [-10, 90],
+  // Ş5: temas anındaki vuran diz büküşü. Aynı fiziksel sınır, kickKnee şuttan sonra Ş4/backswing'den
+  // daha fazla açılabildiği için üst sınır biraz daha geniş (160°, topuk-kalçaya değecek kadar bükülme dahil).
+  kickKnee: [-10, 160],
+  // Ş4/F4: kurma zirvesindeki vuran diz büküşü (backswing), aynı tanım (kneeFlexion) — 0 (düz) ile
+  // 170 (neredeyse topuk-kalçaya değecek) arası, tüm pratik anatomik aralık.
+  backswing: [0, 170],
+  // Ş3/P3: gövdenin dikeyle açısı (öne/arkaya). Gerçek veride -85° ve -39° gibi imkansız/şüpheli
+  // değerler görüldü (yanlış kamera açısı). -60..45: aşırı geriye yaslanmadan aşırı öne kapanmaya
+  // kadar geniş bir pay bırakır ama -85° gibi anatomik olarak imkansız değerleri dışarıda tutar.
+  trunk: [-60, 45],
+  // Ş7: karşı kolun gövdeyle açısı. 0 (bitişik) – 180 (tam yukarı kaldırılmış), tüm anatomik aralık.
+  armOpen: [0, 180],
+  // Ş8: takipte kalça fleksiyonu. Düz bacaktan (-30°, hafif hiperekstansiyon toleranslı) neredeyse
+  // uyluğun göğse değeceği kalkışa (170°) kadar.
+  followHip: [-30, 170],
+  // P4: takipte ayak bileğinin yükselişi, bacak boyuna oranlı. -1: ölçüm gürültüsüyle hafif negatif
+  // çıkabilir, 2: iki bacak boyu yükseliş (uzun takipli bir şutta olağanüstü ama imkansız değil).
+  followRise: [-1, 2],
+  // Ş1/P1/PL2: destek ayağının topa ön-arka mesafesi, bacak boyuna oranlı. Gerçek veride en kötü
+  // örnek -1.32 bacaktı (yanlış açı, ama anatomik olarak imkansız değil); 1.5 pay bırakır.
+  supportOffset: [-1.5, 1.5],
+  // F2: destek ayağının topa yanal mesafesi (frikik). Gerçek veride -1.96 bacak görüldü ve notlarda
+  // "anlamsız" diye işaretlendi → filtrelenir. 1.2 zaten çok geniş bir yanal mesafe.
+  supportLateral: [-1.2, 1.2],
+  // F3: gövdenin yana yatışı (frikik). Gerçek veride 94° görüldü ve "anlamsız" diye işaretlendi;
+  // ±45° zaten aşırı bir yatışı kapsıyor.
+  trunkLateral: [-45, 45],
+  // F5: takibin çaprazlaması, bacak boyuna oranlı. supportOffset ile aynı gerekçe/genişlik.
+  crossing: [-1, 2],
+  // F1: yaklaşma açısı. Matematiksel sınır ±90° (atan2, ikinci bileşen her zaman pozitif); ±80°
+  // neredeyse kameraya paralel bir yaklaşımı zaten kapsıyor, ±90'a yakın uçlar ölçüm gürültüsü.
+  approachAngle: [-80, 80],
+};
+
+// Ölçüm nesnesindeki her PLAUSIBLE anahtarını kontrol eder, aralık dışındaysa NaN'a çevirir
+// (coach.js'in "ölçülemedi" mekanizması zaten NaN'ı ele alıyor) ve `filtered` listesine ekler.
+// info amaçlı alanlara (kneeAngVelRatio, supportKneeAtPlant, backswingAtPeak, phases, ...) DOKUNULMAZ:
+// bunlar puanlamaya girmiyor, filtreleme onlar için gereksiz (kneeAngVelRatio zaten kalibrasyon bekliyor).
+function applyPlausible(result, keys) {
+  const filtered = [];
+  for (const key of keys) {
+    const range = PLAUSIBLE[key];
+    const v = result[key];
+    // EPS: sınırda tam oturan bir açı (ör. kneeFlexion=170°) trig yuvarlamasıyla 170.00000000000006
+    // gibi çıkabiliyor; küçük bir tolerans olmadan bu, sınırın TAM ÜSTÜNDE meşru bir değeri yanlışlıkla filtreler.
+    const EPS = 1e-6;
+    if (range && Number.isFinite(v) && (v < range[0] - EPS || v > range[1] + EPS)) {
+      result[key] = NaN;
+      filtered.push(key);
+    }
+  }
+  result.filtered = filtered;
+  return result;
+}
 
 // b noktasındaki iç açı (derece): a-b-c
 export function angleAt(a, b, c) {
@@ -225,7 +291,7 @@ export function measure(frames, contact, ball, side, fps = 30) {
     ? kneeFlexion(frames[phases.backswingPeak], side)
     : NaN;
 
-  return {
+  return applyPlausible({
     dir,
     // Destek ayağının topa göre ön-arka konumu. + = topun önünde, - = gerisinde
     supportOffset,
@@ -241,7 +307,7 @@ export function measure(frames, contact, ball, side, fps = 30) {
     phases: { ...phases, times },
     supportKneeAtPlant,
     backswingAtPeak,
-  };
+  }, ['supportOffset', 'supportKnee', 'trunk', 'backswing', 'kickKnee', 'armOpen', 'followRise', 'followHip']);
 }
 
 // cp-11-evreler: findPhases()'in kare indekslerini temasa göre saniyeye çevirir (temas = 0,
@@ -333,7 +399,7 @@ export function measureFreeKick(frames, contact, ball, side, fps = 30) {
     ? kneeFlexion(frames[phases.backswingPeak], side)
     : NaN;
 
-  return {
+  return applyPlausible({
     dir: mirror,
     approachAngle,
     supportLateral,
@@ -344,5 +410,5 @@ export function measureFreeKick(frames, contact, ball, side, fps = 30) {
     phases: { ...phases, times },
     supportKneeAtPlant,
     backswingAtPeak,
-  };
+  }, ['approachAngle', 'supportLateral', 'trunkLateral', 'backswing', 'crossing']);
 }

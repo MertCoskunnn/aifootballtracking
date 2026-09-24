@@ -7,9 +7,9 @@
 // tarayıcıda çalışan regresyon kontrol sayfası (tests/regresyon.html) AYNI kodu çalıştırmalı,
 // yoksa "Messi hâlâ 100 mü" kontrolü sadece burada doğru, orada yanlış olabilir. Bu dosyada artık
 // sadece arayüz ve akış var; tarama adımlarının kendisi pipeline.js'te.
-import * as pipeline from './pipeline.js?v=22';
-import { measure, measureFreeKick, buildTrack } from './metrics.js?v=22';
-import { evaluate } from './coach.js?v=22';
+import * as pipeline from './pipeline.js?v=23';
+import { measure, measureFreeKick, buildTrack } from './metrics.js?v=23';
+import { evaluate } from './coach.js?v=23';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');

@@ -21,6 +21,7 @@
 | 6 | cp-13-vurus-turleri | Plase modu, hareketli top ayrımı, kural setleri, otomatik tür önerisi | Sonnet | ✅ |
 | 6b | cp-14a-olcum-yeterliligi | (Referans taramasında bulundu) Tek madde ölçülüp 100 puan verilmesin: ağırlık kapsamı %50 altındaysa puan yok, "ölçüm yetersiz" + çekim önerisi | Sonnet | ✅ |
 | 6c | cp-14b-aci-tespiti | (Referans verisinden) Açıyı koşudan değil vücut yöneliminden oku: omuz genişliği/gövde boyu (yandan küçük), sol omuzun tarafı (önden/arkadan). Messi antrenmanı "önden" sanılıyordu | Sonnet | ❌ gerçek videoda başarısız (K2 88→62), `deneme/aci-tespiti-omuz` dalında. Sonraki fikir: temastan önceki koşu karelerinde yönelim |
+| 6d | cp-14c-makul-aralik | (Referans verisinden) Fizyolojik olarak imkânsız ölçümler (destek dizi 117°, gövde -85°) "ölçülemedi" sayılsın, saçma öneri çıkmasın | Sonnet | ✅ |
 | 7 | cp-14-referans-dogrulama | Referans kliplerle kalibrasyon, METRICS.md güncelleme | Frodo | bekliyor (5,6) |
 
 ## Kabul kapıları (her checkpoint)
