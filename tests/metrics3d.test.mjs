@@ -3,17 +3,30 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { angle3, posture3d, contactPosture, compareToReference, referenceFor } from '../metrics3d.js';
 
-// Sahte 3D iskelet (metre, y aşağı): sağ ayakla vuran, destek (sol) dizi supportFlex kadar bükük.
-function body({ supportFlex = 30, kickFlex = 45, lean = 0 } = {}) {
+// Sahte 3D iskelet (metre, y aşağı, oyuncu -z yönüne bakıyor): sağ ayakla vuran.
+// supportFlex/kickFlex: diz bükülmesi. lean: yana yatış (+ = +x = sağ = vuran taraf; sol kalça x=-0.1).
+// pitch: öne eğim (+ = öne). thigh: vuran uyluğun öne açısı (+ = önde, − = geride).
+function body({ supportFlex = 30, kickFlex = 45, lean = 0, pitch = 0, thigh = 0 } = {}) {
   const w = Array.from({ length: 33 }, () => ({ x: 0, y: 0, z: 0 }));
   const r = (d) => (d * Math.PI) / 180;
-  w[23] = { x: -0.1, y: 0, z: 0 }; w[24] = { x: 0.1, y: 0, z: 0 }; // kalçalar
-  const sh = (x) => ({ x: x + 0.5 * Math.sin(r(lean)), y: -0.5 * Math.cos(r(lean)), z: 0 });
+  w[23] = { x: -0.1, y: 0, z: 0 }; w[24] = { x: 0.1, y: 0, z: 0 }; // kalçalar (23 sol, 24 sağ)
+  const L = 0.5, sx = L * Math.sin(r(lean)), sz = -L * Math.sin(r(pitch)), sy = -Math.sqrt(L * L - sx * sx - sz * sz);
+  const sh = (x) => ({ x: x + sx, y: sy, z: sz });
   w[11] = sh(-0.18); w[12] = sh(0.18);
-  w[13] = { x: w[11].x - 0.25, y: w[11].y + 0.1, z: 0 }; w[14] = { x: w[12].x + 0.25, y: w[12].y + 0.1, z: 0 };
-  const leg = (h, k, a, flex) => { w[k] = { x: w[h].x, y: 0.45, z: 0 }; w[a] = { x: w[h].x, y: 0.45 + 0.45 * Math.cos(r(flex)), z: 0.45 * Math.sin(r(flex)) }; };
+  w[0] = { x: sx, y: sy - 0.15, z: sz - 0.1 }; // burun: omuzların önünde
+  w[13] = { x: w[11].x - 0.25, y: w[11].y + 0.1, z: w[11].z }; w[14] = { x: w[12].x + 0.25, y: w[12].y + 0.1, z: w[12].z };
+  // Uyluk kalçadan aşağı (thigh kadar öne), kaval kemiği dizden flex kadar geriye (+z) bükülür.
+  const leg = (h, k, a, flex, th = 0) => {
+    w[k] = { x: w[h].x, y: 0.45 * Math.cos(r(th)), z: -0.45 * Math.sin(r(th)) };
+    const s = r(flex - th);
+    w[a] = { x: w[h].x, y: w[k].y + 0.45 * Math.cos(s), z: w[k].z + 0.45 * Math.sin(s) };
+  };
   leg(23, 25, 27, supportFlex);
-  leg(24, 26, 28, kickFlex);
+  leg(24, 26, 28, kickFlex, thigh);
+  for (const [heel, toe, ank] of [[29, 31, 27], [30, 32, 28]]) {
+    w[heel] = { x: w[ank].x, y: w[ank].y + 0.05, z: w[ank].z + 0.05 };
+    w[toe] = { x: w[ank].x, y: w[ank].y + 0.07, z: w[ank].z - 0.15 };
+  }
   return w;
 }
 // Kamerayı çevirmek = iskeleti dikey eksen etrafında döndürmek (yandan ↔ arkadan)
@@ -59,7 +72,7 @@ test('compareToReference: referansla aynı postür 100, farklı postür düşük
 
 // Aynalama: sağ ayaklının vuruşu = sol ayaklının (Messi) ayna görüntüsü. İskeleti x'te aynala ve
 // sol/sağ noktaları yer değiştir: sağ ayakla ölçülen postür, aynadaki sol ayakla ölçülenle aynı olmalı.
-const SWAP = [[11, 12], [13, 14], [23, 24], [25, 26], [27, 28]];
+const SWAP = [[11, 12], [13, 14], [23, 24], [25, 26], [27, 28], [29, 30], [31, 32]];
 const mirror = (w) => {
   const m = w.map((q) => ({ x: -q.x, y: q.y, z: q.z }));
   for (const [a, b] of SWAP) [m[a], m[b]] = [m[b], m[a]];
@@ -67,7 +80,7 @@ const mirror = (w) => {
 };
 
 test('aynalama: sağ ayaklı postür, aynadaki sol ayaklıyla birebir aynı ölçülür', () => {
-  const w = body({ supportFlex: 25, kickFlex: 55, lean: 8 });
+  const w = body({ supportFlex: 25, kickFlex: 55, lean: 8, pitch: 6, thigh: 25 });
   const right = posture3d(w, 'right');
   const left = posture3d(mirror(w), 'left');
   for (const k of ['supportKnee', 'kickKnee', 'kickHip', 'trunkLean', 'trunkSide', 'armOpen']) {
@@ -112,4 +125,28 @@ test('Messi referans dosyası: iki vuruşun her biri ortalamaya göre 100 alır'
   const ref = JSON.parse(fs.readFileSync(new URL('../referans/messi-plase.json', import.meta.url), 'utf8'));
   assert.equal(ref.foot, 'left');
   for (const v of ref.vuruslar) assert.equal(compareToReference(v.posture, ref.posture, 'Messi').total, 100, v.id);
+});
+
+test('posture3d: öne eğim ve uyluk işaretli (+ öne, − geriye), yana yatış destek tarafına +', () => {
+  const fwd = posture3d(body({ pitch: 10 }), 'right');
+  const back = posture3d(body({ pitch: -10 }), 'right');
+  assert.ok(Math.abs(fwd.trunkLean - 10) < 0.5 && Math.abs(back.trunkLean + 10) < 0.5, `${fwd.trunkLean} ${back.trunkLean}`);
+  assert.ok(Math.abs(fwd.trunkSide) < 0.5, 'öne eğim yana yatış sayılmaz');
+  const thighF = posture3d(body({ thigh: 40, kickFlex: 60 }), 'right');
+  const thighB = posture3d(body({ thigh: -20, kickFlex: 60 }), 'right');
+  assert.ok(Math.abs(thighF.kickHip - 40) < 0.5 && Math.abs(thighB.kickHip + 20) < 0.5, `${thighF.kickHip} ${thighB.kickHip}`);
+  assert.ok(Math.abs(thighF.kickKnee - 60) < 0.5);
+  // Sağ ayakla vuruyor → destek sol (−x). lean<0 omuzları destek tarafına yatırır → trunkSide +.
+  assert.ok(posture3d(body({ lean: -8 }), 'right').trunkSide > 7.5);
+  assert.ok(posture3d(body({ lean: 8 }), 'right').trunkSide < -7.5);
+  // Yan eğim öne eğimi şişirmez
+  assert.ok(Math.abs(posture3d(body({ lean: 8 }), 'right').trunkLean) < 0.5);
+});
+
+test('posture3d: eğim ve kalça kamera yönünden bağımsız (öne eğik, uyluk önde, 90° döndürülmüş)', () => {
+  const w = body({ pitch: 12, thigh: 30, kickFlex: 50, lean: 4 });
+  const a = posture3d(w, 'right'), b = posture3d(rotY(w, 90), 'right'), c = posture3d(rotY(w, 200), 'right');
+  for (const k of ['trunkLean', 'kickHip', 'trunkSide']) {
+    assert.ok(Math.abs(a[k] - b[k]) < 0.5 && Math.abs(a[k] - c[k]) < 0.5, `${k}: ${a[k]} ${b[k]} ${c[k]}`);
+  }
 });

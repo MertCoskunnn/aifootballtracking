@@ -98,3 +98,44 @@ Uygulamanın kendi kodu (vision → detect → metrics → coach) gerçek videol
 | PL4 diz açısal hızı oranı | 28 … 1257 | Tanım kararsız (yaklaşma hızı ~0'da oran patlıyor), bilgi olarak kalmalı, yeniden tanımlanmalı |
 
 **Kalibrasyon için gereken veri:** yandan, sabit telefonla çekilmiş, tek oyunculu, tam vücut kadrajda videolar. En iyi kaynak Mert'in kendisi (hedef kullanıcı): 5 ayak üstü, 5 plase, 5 sürerek vuruş; arkadan 2-3 frikik.
+
+## 3D referans: doksana plase (v1, 2026-09-25)
+
+**Karar (Mert):** İlk tam sürüm tek teknik: sol ayak sağ doksana, sağ ayak sol doksana. Referans
+Messi'nin idman frikiği, sağ ayak için aynalanır. Puan sadece **temas anındaki postürün** Messi'ye
+yakınlığı. Koşu ve topun gidişi puana girmez.
+
+**Neden 3D:** 2D açı, bükülme kameraya doğru olduğunda kısalır. MediaPipe'ın 3D (world) noktalarından
+hesaplanan eklem açısı kameradan bağımsızdır (test: iskelet 90° döndürülünce fark < 0.5°). Tek
+kameradan 3D bir tahmindir, kusursuz değildir; aşağıdaki gürültü bandı bu yüzden var.
+
+**Aynalama:** Ölçüler sağ/sol değil vuran/destek tarafına göre tanımlı. Sağ ayaklının destek dizi
+Messi'nin destek diziyle kıyaslanır (test: aynalanmış iskelet birebir aynı ölçülür).
+
+**Ölçüm (tests/postur.html, temas ±2 kare medyanı, tekrar eden kareler atıldı):**
+
+| Açı (°) | MV1 (6.10 sn, otomatik) | MV2 (14.40 sn, elle) | Referans (ortalama) | Gürültü bandı |
+|---|---|---|---|---|
+| Destek dizi | 40.4 | 24.9 | 32.7 | ±10 |
+| Vuran diz | 37.7 | 38.7 | 38.2 | ±8 |
+| Vuran uyluk (+ önde) | 52.4 | 52.6 | 52.5 | ±8 |
+| Gövdenin öne eğimi (+ öne) | 2.0 | −0.1 | 0.9 | ±5 |
+| Gövdenin yana yatışı (+ destek tarafına) | −5.9 | −1.3 | −3.6 | ±5 |
+| Karşı kol | 18.6 | 3.8 | 11.2 | ±15 |
+
+- Vuran diz ve uyluk iki vuruşta neredeyse aynı: tekniğin en tutarlı imzası.
+- İnceleme (ikinci Opus, 2026-09-25) sonrası: gövde eğimi ve uyluk artık işaretli ve vücut
+  eksenlerine göre (ön eksen = burun + destek ayağının ucu). Eskiden gövde eğimi dikeyden toplam
+  sapmaydı: yana yatışı da sayıyordu, geriye yaslanan biri öne eğik Messi'yle aynı puanı alıyordu.
+  Messi'nin temas anında gövdesi neredeyse dik; eski 6-9° "eğim" yana yatıştı.
+- Bilinen sınır: dikey eksen kameranın dikeyi. Telefon θ derece eğik tutulursa gövde açıları ~θ kayar.
+  v1 kuralı: telefon düz ve sabit.
+- Destek dizi ve kol iki vuruş arasında 14-15° oynuyor. Bu Messi'nin değişkenliği mi, 3D tahminin
+  gürültüsü mü, ayrılamıyor: 25 fps bulanık görüntü, destek bacağı kısmen kapalı. Tek karede
+  destek dizi arka arkaya 23°, 50°, 14° okunabiliyor.
+- Gürültü bandının içindeki fark ceza almaz, dışında bandın ötesindeki fark doğrusal düşer
+  (POSTURE_TOL). Messi iki vuruşunda da 100 alıyor.
+- MV2'de eski elle işaretlenen temas (14.33) yanlıştı: o karede top hâlâ yerinde. Kare kare
+  bakınca temas 14.40.
+- **Açık:** Bant ve toleranslar [T]. Mert'in 60 fps videoları (aynı vuruş yandan+arkadan) ile
+  açıdan bağımsızlık ve gerçek ayrışma ölçülecek.

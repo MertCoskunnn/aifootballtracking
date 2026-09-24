@@ -27,15 +27,25 @@ export function angle3(a, b, c) {
   return d > 0 ? deg(Math.acos(Math.max(-1, Math.min(1, dot(u, v) / d)))) : NaN;
 }
 
+const I_NOSE = 0, I_HEEL = { left: 29, right: 30 }, I_TOE = { left: 31, right: 32 };
+const unit = (a) => { const l = len(a) || 1; return { x: a.x / l, y: a.y / l, z: a.z / l }; };
+const flat = (a) => ({ x: a.x, y: 0, z: a.z });
+const scale = (a, k) => ({ x: a.x * k, y: a.y * k, z: a.z * k });
+const add = (a, b) => ({ x: a.x + b.x, y: a.y + b.y, z: a.z + b.z });
+const asinDeg = (v) => deg(Math.asin(Math.max(-1, Math.min(1, v))));
+
 /**
  * Tek bir 3D iskeletten temas anı postürü. w: 33 elemanlı {x,y,z} (MediaPipe world, y aşağı).
  * kickSide: 'left' | 'right' (vuran ayak). Dönen (derece):
  *   supportKnee: destek dizi bükülmesi (0 = düz)
  *   kickKnee:    vuran diz bükülmesi
- *   kickHip:     vuran bacağın kalça fleksiyonu (uyluğun gövdeye göre öne kalkışı)
- *   trunkLean:   gövdenin dikeyden toplam sapması
- *   trunkSide:   gövdenin yana yatışı; + = destek ayağı tarafına
+ *   kickHip:     vuran uyluğun gövde çizgisine göre açısı; + = önde, − = geride (kurma)
+ *   trunkLean:   gövdenin öne eğimi; + = öne, − = geriye yaslanma
+ *   trunkSide:   gövdenin yana yatışı; + = destek ayağı tarafına, − = vuran tarafa
  *   armOpen:     destek tarafı kolunun gövdeden açılması (omuz açısı)
+ * Eksenler vücuttan kurulur (yan: kalçalar, ön: burun + destek ayağının ucu), böylece kamera
+ * yönünden ve aynalamadan bağımsızdır. Dikey eksen kameranın dikeyi: telefon eğik tutulursa gövde
+ * açıları o kadar kayar (v1 kuralı: telefon düz ve sabit).
  */
 export function posture3d(w, kickSide) {
   if (!w || w.length !== 33) return null;
@@ -43,20 +53,21 @@ export function posture3d(w, kickSide) {
   const flex = (s) => 180 - angle3(w[I.hip[s]], w[I.knee[s]], w[I.ankle[s]]);
   const hipC = mid(w[I.hip.left], w[I.hip.right]);
   const shC = mid(w[I.shoulder.left], w[I.shoulder.right]);
-  const trunk = sub(shC, hipC);
-  const up = { x: 0, y: -1, z: 0 }; // world y aşağı
-  // Yan eksen: kalçanın vuran taraftan destek tarafına doğru yönü (dikey bileşeni atılır).
-  let lat = sub(w[I.hip[sup]], w[I.hip[kickSide]]);
-  lat = { x: lat.x, y: 0, z: lat.z };
-  const latLen = len(lat) || 1;
-  lat = { x: lat.x / latLen, y: 0, z: lat.z / latLen };
-  const tLen = len(trunk) || 1;
+  const t = unit(sub(shC, hipC)); // gövde ekseni, kalçadan omuza
+  const lat = unit(flat(sub(w[I.hip[sup]], w[I.hip[kickSide]]))); // vuran → destek tarafı, yatay
+  // Ön eksen: yatayda yan eksene dik; işareti yüzün ve destek ayağının baktığı yöne göre seçilir.
+  let fwd = unit({ x: lat.z, y: 0, z: -lat.x });
+  const look = add(flat(sub(w[I_NOSE], shC)), flat(sub(w[I_TOE[sup]], w[I_HEEL[sup]])));
+  if (dot(look, fwd) < 0) fwd = scale(fwd, -1);
+  // Kalça: uyluğun, gövde ekseninin aşağı uzantısına göre ön-arka açısı (gövdeye dik ön eksende).
+  const fwdT = unit(sub(fwd, scale(t, dot(fwd, t))));
+  const thigh = sub(w[I.knee[kickSide]], w[I.hip[kickSide]]);
   return {
     supportKnee: flex(sup),
     kickKnee: flex(kickSide),
-    kickHip: 180 - angle3(w[I.shoulder[kickSide]], w[I.hip[kickSide]], w[I.knee[kickSide]]),
-    trunkLean: deg(Math.acos(Math.max(-1, Math.min(1, dot(trunk, up) / tLen)))),
-    trunkSide: deg(Math.asin(Math.max(-1, Math.min(1, dot(trunk, lat) / tLen)))),
+    kickHip: deg(Math.atan2(dot(thigh, fwdT), -dot(thigh, t))),
+    trunkLean: asinDeg(dot(t, fwd)),
+    trunkSide: asinDeg(dot(t, lat)),
     armOpen: angle3(w[I.hip[sup]], w[I.shoulder[sup]], w[I.elbow[sup]]),
   };
 }
@@ -108,8 +119,8 @@ const PHRASE = {
   supportKnee: ['destek dizin daha düz, kilitli basıyorsun', 'destek dizin daha fazla bükülmüş'],
   kickKnee: ['vuran dizin temasta daha açık', 'vuran dizin temasta daha bükük'],
   kickHip: ['vuran bacağın uyluğu daha geride', 'vuran bacağın uyluğu daha önde'],
-  trunkLean: ['gövden daha dik', 'gövden daha fazla eğik'],
-  trunkSide: ['gövden destek tarafına daha az yatıyor', 'gövden destek tarafına daha fazla yatıyor'],
+  trunkLean: ['gövden daha geride (daha dik ya da geriye yaslanmış)', 'gövden daha fazla öne eğik'],
+  trunkSide: ['gövden vuran ayağın tarafına daha fazla yatık', 'gövden destek ayağının tarafına daha fazla yatık'],
   armOpen: ['karşı kolun daha kapalı', 'karşı kolun daha açık'],
 };
 
@@ -117,9 +128,9 @@ const PHRASE = {
 const ADVICE = {
   supportKnee: ['Destek dizini biraz daha bük, yaylı bas.', 'Destek bacağını daha sağlam tut, bu kadar çökme.'],
   kickKnee: ['Temasta vuran dizini bu kadar erken açma, bacağı kamçı gibi geç aç.', 'Temasa kadar dizini daha fazla aç, topa bükük bacakla değme.'],
-  kickHip: ['Uyluğunu topa doğru daha fazla öne getir, bacak gövdenin gerisinde kalmasın.', 'Uyluğun çok önde; topa biraz daha geriden, bacağı savurarak gel.'],
-  trunkLean: ['Gövdeni topun üstüne biraz daha eğ.', 'Gövdeni bu kadar eğme, daha dik kal.'],
-  trunkSide: ['Gövdeni destek ayağının tarafına biraz daha yatır.', 'Gövdeni destek tarafına bu kadar yatırma, dengen kayıyor.'],
+  kickHip: ['Temasta uyluğun geride kalıyor: dizini topa doğru daha fazla öne getir.', 'Temasta uyluğun çok önde: topa bacağı arkadan savurarak gel, dizini erken kaldırma.'],
+  trunkLean: ['Geriye yaslanma, gövdeni topun üstüne biraz öne getir.', 'Gövdeni bu kadar öne kapatma, daha dik kal.'],
+  trunkSide: ['Gövdeni vuran ayağının tarafına bu kadar yatırma, destek ayağının üstünde kal.', 'Gövdeni destek tarafına bu kadar yatırma, dengen kayıyor.'],
   armOpen: ['Karşı kolunu yana daha fazla aç, denge ondan gelir.', 'Karşı kolunu bu kadar açma.'],
 };
 

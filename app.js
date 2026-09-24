@@ -38,8 +38,10 @@ window.__hoca = state;
 
 // 2026-09-25 (Mert): v1'in puanı Messi'nin temas anı postürüne yakınlık. Referans, Messi'nin idman
 // videosundan uygulamanın kendi hattıyla ÖLÇÜLDÜ (tests/postur.html → referans/messi-plase.json).
-let messiRef = null;
-fetch('referans/messi-plase.json?v=41').then((r) => (r.ok ? r.json() : null)).then((j) => { messiRef = j; }).catch(() => {});
+// undefined = henüz yükleniyor, null = yüklenemedi. Analiz yükleme bitmeden gelirse bekleyip tekrar çalışır.
+let messiRef;
+const messiRefReady = fetch('referans/messi-plase.json?v=42').then((r) => (r.ok ? r.json() : null)).catch(() => null)
+  .then((j) => { messiRef = j; });
 
 function setStatus(t) { $('status').textContent = t; }
 
@@ -479,7 +481,7 @@ $('next').addEventListener('click', () => state.index < state.frames.length - 1 
 const SETUP_HINTS = {
   '': 'Açıyı, vuruş türünü ve ayağı seç. Sonra videoyu yükle: hoca vuruş anını ve topu kendisi bulur, temas karesini istersen elle düzeltebilirsin.',
   shot: 'Çekim: tam yandan, telefon sabit, tüm vücut ve top kadrajda.',
-  placement: 'Çekim: yandan ya da arkadan, telefon sabit, tüm vücut ve top kadrajda. Sol ayak sağ doksana, sağ ayak sol doksana.',
+  placement: 'Çekim: yandan ya da arkadan, telefon düz ve sabit (eğik tutma, gövde açıları kayar), tüm vücut ve top kadrajda. Sol ayak sağ doksana, sağ ayak sol doksana.',
   pass: 'Çekim: tam yandan, telefon sabit, tüm vücut ve top kadrajda.',
   freekick: 'Çekim: arkadan ya da çapraz arkadan, telefon sabit, oyuncu ve top kadrajda.',
 };
@@ -604,6 +606,19 @@ function runAnalysis() {
   // kullanıcıya doğrudan hangi açıdan çekmesi gerektiği söylenir.
   const ruleSet = getRuleSet(mode, foot, angle);
   if (ruleSet.olculemez) { renderUnmeasurable(ruleSet, mode); return; }
+  // Doksana plase (v1'in tek tekniği): puan 2D kurallardan değil, Messi'nin 3D temas postüründen.
+  // 2D ölçümden ÖNCE: temas karesinde iskelet yoksa 2D ölçüm hata atar, ama 3D postür komşu
+  // karelerden (±2) yine okunabilir.
+  if (mode === 'placement') {
+    if (messiRef === undefined) { messiRefReady.then(runAnalysis); return; }
+    if (state.activeKick) {
+      state.track = buildTrack(state.activeKick.frames.map((f) => f.people), state.activeKick.contact,
+        { x: state.activeKick.rest.x, y: state.activeKick.rest.y }, state.seed);
+    }
+    const cmp = placementReport(foot);
+    if (state.activeKick) { state.activeKick.score = cmp?.total ?? null; renderKickList(); }
+    return;
+  }
   try {
     let res;
     if (state.activeKick) {
@@ -617,12 +632,6 @@ function runAnalysis() {
         ? measureFreeKick(state.track, state.contact, state.ball, foot, pipeline.DENSE_FPS)
         : measure(state.track, state.contact, state.ball, foot, pipeline.DENSE_FPS);
       res = evaluate(m, mode, null, ruleSet.kurallar);
-    }
-    // Doksana plase (v1'in tek tekniği): puan 2D kurallardan değil, Messi'nin 3D temas postüründen.
-    if (mode === 'placement') {
-      const cmp = placementReport(foot, angle, ruleSet);
-      if (state.activeKick) { state.activeKick.score = cmp?.total ?? null; renderKickList(); }
-      return;
     }
     if (state.activeKick) { state.activeKick.score = res.total; renderKickList(); }
     // Ürün tanımı (2026-09-24 gece): top ne yaptı → hangi postür hatası bunu açıklıyor → nasıl düzelir.
@@ -638,7 +647,7 @@ function runAnalysis() {
 
 // Messi kıyas raporu. 3D noktalar yoksa (MoveNet yedeği ya da temasta iskelet yok) puan verilmez:
 // tahmin edilen bir puan, gösterilmeyen bir puandan kötüdür.
-function placementReport(foot, angle, ruleSet) {
+function placementReport(foot) {
   const el = $('report');
   const ref = referenceFor(messiRef, foot);
   const posture = contactPosture(state.track, state.contact, foot);
