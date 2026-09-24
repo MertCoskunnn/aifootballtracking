@@ -83,7 +83,7 @@ function analyzeOneKick(kick, mode, foot, angle, ruleSet) {
     return { t: kick.t, total: null, olculemez: true, mesaj: ruleSet.mesaj, referans: null, items: [], quality: kick.quality ?? null };
   }
   try {
-    const a = pipeline.analyzeKick(kick, { mode, foot });
+    const a = pipeline.analyzeKick(kick, { mode, foot, angle, rules: ruleSet.kurallar });
     return {
       t: kick.t,
       total: a.result.total, // insufficient ise coach.js zaten null döner ("ölçüm yetersiz")

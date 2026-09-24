@@ -158,6 +158,66 @@ export const RULES = {
   ],
 };
 
+// --- Açıya göre kural setleri (2026-09-24 gece, Mert'in ürün tanımı) ------------------------------
+// "Bu açıdan ölçülemez" kalktı: her açıdan GÖRÜLEBİLEN ne varsa ölçülür. Mert'in videolarının çoğu
+// arkadan çekiliyor; eski matriste arkadan sadece frikik ölçülüyordu, şut/plase/pas "ölçülemez"
+// çıkıyordu. Arkadan görülen şeyler (measureFreeKick'in ölçtükleri): destek ayağının topa YANAL
+// mesafesi, gövdenin yana yatışı, kurma, yaklaşma açısı, takibin yönü. Yandan görülenler (measure):
+// destek ayağının ön-arka konumu, gövdenin öne-arkaya yatışı, diz açıları, takibin yüksekliği.
+// Vuruş türü sadece İDEAL ARALIKLARI değiştirir. Kaynak etiketleri RESEARCH.md ile aynı:
+// [K] kaynaklı, [L] literatürde yaygın, [T] bizim tahminimiz (videolarla kalibre edilecek).
+const fk = (key) => RULES.freekick.find((r) => r.key === key);
+const sh = (key) => RULES.shot.find((r) => r.key === key);
+
+const BEHIND_SHOT = [
+  { ...fk('supportLateral'), ref: 'A1', source: '[K] Bessenouci 2019/2020 (destek-top mesafesi denge ve isabeti etkiler), [T] eşik',
+    low: 'Destek ayağın topa çok yakın, vuruş bacağının salınım alanı daralıyor. Ayağını topun yanına, bir karış dışına bas.',
+    high: 'Destek ayağın topun çok uzağında, denge ve isabet kaybediyorsun. Ayağını topa yaklaştır.',
+    drill: 'Topun yanına bir karış mesafede bir işaret koy, destek ayağını her şutta oraya bas, 10 tekrar.' },
+  { ...fk('trunkLateral'), ref: 'A2', source: '[K] Lees 2010 (ayak üstü şutta temasta destek tarafına 10° ve 16°)' },
+  { ...fk('backswing'), ref: 'A3' },
+  { ...fk('approachAngle'), ref: 'A4', ideal: [20, 50], source: '[L] Isokawa & Lees 1988: 30-45° açılı yaklaşma en hızlı şutu verir, [T] arkadan-kamera eşiği' },
+  { key: 'crossing', ref: 'A5', name: 'Takibin yönü', unit: 'bacak', ideal: [-0.15, 0.5], tol: 0.4, weight: 2,
+    source: '[L] ayak üstü şutta takip hedefe doğru gider, frikikteki gibi belirgin çaprazlamaz; [T] eşik',
+    low: 'Vuruştan sonra bacağın dışarı açılıyor, top yana kaçabilir. Ayağın hedefe doğru devam etsin.',
+    high: 'Takip gövdenin önünden fazla çaprazlıyor, bu frikik sarması; düz şutta top yana kıvrılır. Ayağını hedefe doğru uzat.',
+    drill: 'Kalenin ortasına bir hedef koy, vurduktan sonra ayak bileğin o hedefi göstersin, 10 tekrar.' },
+];
+
+const BEHIND_PLACEMENT = [
+  { ...BEHIND_SHOT[0], ref: 'A1' },
+  { ...fk('trunkLateral'), ref: 'A2', ideal: [0, 18], source: '[T] plase kontrollü vuruş: frikikten az yatış' },
+  { ...fk('backswing'), ref: 'A3', ideal: [60, 110], tol: 35, weight: 1, source: '[T] plase güç değil kontrol (RESEARCH-VURUS-TURLERI §1)',
+    high: 'Kurma çok abartılı: plase güç değil kontrol işi, yarım kurma yeter.' },
+  { ...fk('approachAngle'), ref: 'A4', ideal: [15, 45], source: '[T] plase: hafif açılı yaklaşma' },
+  { ...fk('crossing'), ref: 'A5', ideal: [0.1, 0.8], source: '[L] iç tarafla uzak köşe plasesinde ayak topu sarar, [T] eşik' },
+];
+
+const BEHIND_PASS = [
+  { ...BEHIND_SHOT[0], ref: 'A1', ideal: [0.0, 0.35], source: '[K] pas isabeti destek ayağı mesafesine bağlı (RESEARCH.md P1), [T] eşik' },
+  { ...fk('trunkLateral'), ref: 'A2', ideal: [-5, 12], source: '[T] pas: gövde topun üstünde, dik' ,
+    low: 'Gövden vuruş tarafına yatıyor, pas havalanabilir. Gövdeni topun üstünde dik tut.' },
+  { ...fk('backswing'), ref: 'A3', ideal: [40, 100], tol: 35, weight: 1, source: 'RESEARCH.md P5: pas şut değildir, abartılı salınım gerekmez' },
+  { ...BEHIND_SHOT[4], ref: 'A5' },
+];
+
+// Frikik yandan: ön-arka düzlem kuralları şutla aynı mekanik (Lees 2010: curl ve instep aynı
+// evreler), falso ölçülemez ama destek ayağı, gövde, kurma, takip görülür.
+const SIDE_FREEKICK = ['supportOffset', 'trunk', 'supportKnee', 'backswing', 'followHip'].map((k) => ({
+  ...sh(k), source: `${sh(k).source} · frikik yandan: şutla aynı mekanik [L]`,
+}));
+
+export const RULES_BY_VIEW = {
+  'shot:side': RULES.shot,
+  'shot:behind': BEHIND_SHOT,
+  'placement:side': RULES.placement,
+  'placement:behind': BEHIND_PLACEMENT,
+  'pass:side': RULES.pass,
+  'pass:behind': BEHIND_PASS,
+  'freekick:behind': RULES.freekick,
+  'freekick:side': SIDE_FREEKICK,
+};
+
 // Hareketli topa vuruş BAĞLAMI (mod değil): oyuncunun kendi sürdüğü ya da bir pastan gelen topa
 // vurması, duran topa göre destek ayağı ve kurma davranışını değiştiriyor (RESEARCH-VURUS-TURLERI.md
 // §2, H1/H3 — Palucci Vieira 2019 [özet], Egan 2007 [K]). evaluate()'e context.movingBall=true
@@ -243,17 +303,20 @@ const REFERENCE = {
  *   kurallar: RULES[mode] (coach.js#evaluate'in kullandığı AYNI dizi — eşik/kaynak burada da okunabilir).
  */
 export function getRuleSet(mode, foot, angle) {
-  const okAngle = ANGLE_OK[mode];
-  if (!okAngle) throw new Error(`Bilinmeyen vuruş türü: ${mode}`);
+  if (!ANGLE_OK[mode]) throw new Error(`Bilinmeyen vuruş türü: ${mode}`);
   if (angle !== 'side' && angle !== 'behind') throw new Error(`Bilinmeyen açı: ${angle}`);
   if (foot !== 'right' && foot !== 'left') throw new Error(`Bilinmeyen ayak: ${foot}`);
-  if (angle !== okAngle) return { olculemez: true, mesaj: ANGLE_MESSAGE[mode] };
+  // 2026-09-24 gece: hiçbir kombinasyon "ölçülemez" değil. Açı, hangi ölçüm setinin (yandan:
+  // measure, arkadan: measureFreeKick) ve hangi ideal aralıkların kullanılacağını belirler.
+  // ANGLE_OK artık sadece "bu vuruş için en çok bilgi veren açı" ipucu (rapor notu).
   const ref = REFERENCE[mode][foot];
   return {
     olculemez: false,
     mode, foot, angle,
+    measureKind: angle === 'behind' ? 'behind' : 'side',
+    enIyiAci: ANGLE_OK[mode],
     referans: ref.name,
     referansNotu: ref.note,
-    kurallar: RULES[mode],
+    kurallar: RULES_BY_VIEW[`${mode}:${angle}`],
   };
 }

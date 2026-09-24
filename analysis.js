@@ -44,18 +44,22 @@ export function collectKicks(denseFrames, fps) {
  * kick: collectKicks'in ürettiği nesnelerden biri (frames, contact, rest, fps taşımalı).
  * Dönen: { mode, foot, track, measurements, result }
  */
-export function analyzeKick(kick, { mode, foot } = {}) {
+// 2026-09-24 gece: angle ('side' | 'behind') hangi ölçüm setinin kullanılacağını seçer (verilmezse
+// eski davranış: frikik arkadan, diğerleri yandan). seed: kullanıcının dokunarak seçtiği oyuncu
+// (verilmezse kameraya en yakın kişi). rules: getRuleSet(...).kurallar (açıya göre kural seti).
+export function analyzeKick(kick, { mode, foot, angle, seed = null, rules } = {}) {
   const effMode = mode || kick.suggestion?.mode || 'shot';
   const effFoot = foot || kick.foot || 'right';
+  const effAngle = angle || (effMode === 'freekick' ? 'behind' : 'side');
   const ball = { x: kick.rest.x, y: kick.rest.y };
-  const track = buildTrack(kick.frames.map((f) => f.people), kick.contact, ball);
-  const measurements = effMode === 'freekick'
+  const track = buildTrack(kick.frames.map((f) => f.people), kick.contact, ball, seed);
+  const measurements = effAngle === 'behind'
     ? measureFreeKick(track, kick.contact, ball, effFoot, kick.fps || 30)
     : measure(track, kick.contact, ball, effFoot, kick.fps);
   // kick.context: detectMovingBall'dan (collectKicks). Hareketli topsa (RESEARCH-VURUS-TURLERI.md
   // §2, H1/H3) shot/placement'ta ilgili kurallar genişler; pass/freekick/duran topta değişmez.
-  const result = evaluate(measurements, effMode, kick.context);
-  return { mode: effMode, foot: effFoot, track, measurements, result };
+  const result = evaluate(measurements, effMode, kick.context, rules);
+  return { mode: effMode, foot: effFoot, angle: effAngle, track, measurements, result };
 }
 
 /**

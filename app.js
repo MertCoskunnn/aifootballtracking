@@ -595,16 +595,16 @@ function runAnalysis() {
   try {
     let res;
     if (state.activeKick) {
-      const a = pipeline.analyzeKick(state.activeKick, { mode, foot });
+      const a = pipeline.analyzeKick(state.activeKick, { mode, foot, angle, seed: state.seed, rules: ruleSet.kurallar });
       state.track = a.track;
       res = a.result;
     } else {
       // measure() temas civarındaki pencereleri (Ş5/Ş7/Ş8) saniyeye çevirmek için fps ister:
       // burada her zaman yoğun geçişin (DENSE_FPS) karelerini kullanıyoruz.
-      const m = mode === 'freekick'
+      const m = ruleSet.measureKind === 'behind'
         ? measureFreeKick(state.track, state.contact, state.ball, foot, pipeline.DENSE_FPS)
         : measure(state.track, state.contact, state.ball, foot, pipeline.DENSE_FPS);
-      res = evaluate(m, mode);
+      res = evaluate(m, mode, null, ruleSet.kurallar);
     }
     if (state.activeKick) { state.activeKick.score = res.total; renderKickList(); }
     renderReport(res, mode, foot, ruleSet, viewWarning(angle));

@@ -6,30 +6,32 @@ import assert from 'node:assert/strict';
 import { getRuleSet, RULES, MIN_COVERAGE } from '../rules.js';
 import { evaluate, MIN_COVERAGE as COACH_MIN_COVERAGE } from '../coach.js';
 
-// === 1. Ölçülemez kombinasyonlar (yanlış açı) ===
+// === 1. Her açı ölçülebilir (2026-09-24 gece: "ölçülemez" kalktı) ===
+// Arkadan: yanal düzlem ölçümleri (measureFreeKick anahtarları), yandan: ön-arka düzlem (measure).
 
-test('getRuleSet: ayak üstü şut arkadan ölçülemez', () => {
-  const res = getRuleSet('shot', 'right', 'behind');
-  assert.equal(res.olculemez, true);
-  assert.match(res.mesaj, /yandan/);
-});
+const BEHIND_KEYS = new Set(['supportLateral', 'trunkLateral', 'backswing', 'approachAngle', 'crossing']);
+const SIDE_KEYS = new Set(['supportOffset', 'trunk', 'supportKnee', 'backswing', 'kickKnee', 'armOpen', 'followHip', 'followRise', 'kneeAngVelRatio']);
 
-test('getRuleSet: plase arkadan ölçülemez', () => {
-  const res = getRuleSet('placement', 'left', 'behind');
-  assert.equal(res.olculemez, true);
-  assert.match(res.mesaj, /yandan/);
-});
+for (const mode of ['shot', 'placement', 'pass', 'freekick']) {
+  for (const angle of ['side', 'behind']) {
+    test(`getRuleSet: ${mode} ${angle} ölçülebilir, kurallar o açıdan görülen ölçümlerden`, () => {
+      const res = getRuleSet(mode, 'right', angle);
+      assert.equal(res.olculemez, false);
+      assert.equal(res.measureKind, angle);
+      assert.ok(res.kurallar.length >= 4, 'en az 4 kural');
+      const allowed = angle === 'behind' ? BEHIND_KEYS : SIDE_KEYS;
+      for (const r of res.kurallar) assert.ok(allowed.has(r.key), `${r.key} bu açıdan ölçülmüyor`);
+      for (const r of res.kurallar) assert.ok(r.low || r.info, `${r.key} düzeltme cümlesi yok`);
+    });
+  }
+}
 
-test('getRuleSet: pas arkadan ölçülemez', () => {
-  const res = getRuleSet('pass', 'right', 'behind');
-  assert.equal(res.olculemez, true);
-  assert.match(res.mesaj, /yandan/);
-});
-
-test('getRuleSet: frikik yandan ölçülemez', () => {
-  const res = getRuleSet('freekick', 'left', 'side');
-  assert.equal(res.olculemez, true);
-  assert.match(res.mesaj, /arkadan/);
+test('evaluate: arkadan şut kural setiyle puanlar (measureFreeKick anahtarları)', () => {
+  const rules = getRuleSet('shot', 'right', 'behind').kurallar;
+  const m = { supportLateral: 0.2, trunkLateral: 12, backswing: 100, approachAngle: 35, crossing: 0.1 };
+  const res = evaluate(m, 'shot', null, rules);
+  assert.equal(res.insufficient, false);
+  assert.equal(res.total, 100);
 });
 
 // === 2. Ölçülebilir kombinasyonlar + referans oyuncu ===

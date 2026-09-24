@@ -24,12 +24,15 @@ const fmt = (v, unit) => (unit === '°' ? `${Math.round(v)}°` : unit === '×' ?
 // context: { movingBall, ballSpeed } (analysis.js collectKicks/detectMovingBall'dan gelir,
 // RESEARCH-VURUS-TURLERI.md §2/§4). Geriye uyumlu: verilmezse (ya da movingBall false ise)
 // duran top kuralları aynen kullanılır, mevcut çağrılar (tests, "elle düzelt" akışı) değişmez.
-export function evaluate(m, mode, context) {
+// baseRules (isteğe bağlı): rules.js#getRuleSet(...).kurallar — açıya göre kural seti. Verilmezse
+// eski davranış: RULES[mode] (yandan kurallar). Hareketli top genişletmeleri sadece anahtarı
+// eşleşen kurallara uygulanır; arkadan setlerde o anahtarlar olmadığı için kendiliğinden atlanır.
+export function evaluate(m, mode, context, baseRules = RULES[mode]) {
   const overrides = CONTEXT_OVERRIDES[mode];
-  const applyContext = !!(context && context.movingBall && overrides);
+  const applyContext = !!(context && context.movingBall && overrides && baseRules.some((r) => overrides[r.key]));
   const rules = applyContext
-    ? RULES[mode].map((r) => (overrides[r.key] ? { ...r, ...overrides[r.key] } : r))
-    : RULES[mode];
+    ? baseRules.map((r) => (overrides[r.key] ? { ...r, ...overrides[r.key] } : r))
+    : baseRules;
   const items = rules.map((r) => {
     const v = m[r.key];
     // Ölçülemeyen değer (nokta görünmüyor vb.) puana katılmaz, "ölçülemedi" diye gösterilir
