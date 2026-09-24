@@ -78,3 +78,23 @@ Uygulamanın kendi kodu (vision → detect → metrics → coach) gerçek videol
 - **Gerçek Messi videosu:** Serbest lisanslı ve yakın çekim bir Messi vuruş videosu bulunamadı. Mert kendi indirdiği bir klibi `test-videolar/messi/` klasörüne koyarsa, aynı otomatik akış Messi'nin tam hareketini ölçer ve bu tablodaki "Messi" sütunu dolar.
 - **Ş1 ekseni:** P24'teki x ve y eksenlerinin anlamı asıl çalışmada (Alcock 2012) doğrulanmalı.
 - **60 fps:** Ş5 ve temas anı hassasiyeti için gerekli.
+
+---
+
+## Referans taraması (cp-14, 2026-09-24 gecesi)
+18 YouTube klibi (Ronaldo, Messi, Neymar, amatör bireysel idman, arkadan frikik) uygulamanın kendi hattıyla (`tests/referans.html`) tarandı. Ham sonuçlar yerelde `test-videolar/referans/SONUCLAR.md` (git dışı, klipler telifli).
+
+**Karar: hiçbir eşik değiştirilmedi.** Gerekçe: veri az ve dağınık, kural gereği eşik değişikliği veriye dayanmalı.
+
+| Bulgu | Sayı | Sonuç |
+|---|---|---|
+| Profesyonel yayın klipleri (Ronaldo, Messi) | açı arkadan/önden, ayak yanlış (Messi solak → "sağ"), kamera hareketli | Yandan kural kalibrasyonuna **uygun değil** |
+| Tek madde ölçülüp 100 puan (Ronaldo arkadan) | 1/7 ölçüm | → **cp-14a**: kapsam < %50 ise puan yok |
+| İmkânsız değerler (destek dizi 117°, gövde -85°) | birkaç vuruş | → **cp-14c**: makul aralık filtresi |
+| Amatör klipte vuruş bulunamaması | 3/10 klip | Açık: vuruş bulma, düşük çözünürlük/uzak çekimde zayıf |
+| Açı "bilinmiyor" | 5/8 amatör vuruş | Açık: **en zayıf halka**. Omuz genişliği denemesi başarısız (`deneme/aci-tespiti-omuz`) |
+| Amatörlerde destek ayağı (Ş1) | -0.26 … -1.25 bacak | Mert K1/K2 ile aynı desen: hedef kullanıcının en yaygın hatası. Ş1 ağırlığı (3) yerinde |
+| Hareketli top eşiği (5 çap/sn) | amator-sut-1: 10 → hareketli; Mert K2: 3.2 → duran | Tutarlı |
+| PL4 diz açısal hızı oranı | 28 … 1257 | Tanım kararsız (yaklaşma hızı ~0'da oran patlıyor), bilgi olarak kalmalı, yeniden tanımlanmalı |
+
+**Kalibrasyon için gereken veri:** yandan, sabit telefonla çekilmiş, tek oyunculu, tam vücut kadrajda videolar. En iyi kaynak Mert'in kendisi (hedef kullanıcı): 5 ayak üstü, 5 plase, 5 sürerek vuruş; arkadan 2-3 frikik.

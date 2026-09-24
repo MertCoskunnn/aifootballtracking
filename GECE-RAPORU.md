@@ -20,7 +20,7 @@
 - **Neden sahte 100'ü kapattım?** Ronaldo'nun arkadan çekilmiş vuruşu 100 aldı. Oysa 7 ölçümden sadece biri yapılabilmişti. Tek başına çalışan biri bu puana güvenip hiçbir şeyi düzeltmezdi. Artık ölçümlerin en az yarısı yoksa puan yok.
 
 ## Dürüst olalım: ne olmadı
-1. **Referans kalibrasyonu (cp-14) bitmedi.** Ronaldo, Messi ve Neymar klipleri YouTube'dan indi (18 klip), ama çoğu yayın tekrarı ve maç görüntüsü: kamera hareket ediyor, açı arkadan ya da önden, ayak bile yanlış bulunuyor (Messi solak ama "sağ" çıktı). Yandan kuralları bunlarla kalibre etmek yanıltıcı olurdu. Sonuçlar: `test-videolar/referans/SONUCLAR.md`.
+1. **Referans kalibrasyonu (cp-14) eşik değiştirmeden kapandı.** 18 klip tarandı, bulgular METRICS.md'de. En önemli iki bulgu koda girdi (sahte 100, imkânsız değerler). Ronaldo, Messi ve Neymar klipleri YouTube'dan indi (18 klip), ama çoğu yayın tekrarı ve maç görüntüsü: kamera hareket ediyor, açı arkadan ya da önden, ayak bile yanlış bulunuyor (Messi solak ama "sağ" çıktı). Yandan kuralları bunlarla kalibre etmek yanıltıcı olurdu. Sonuçlar: `test-videolar/referans/SONUCLAR.md`.
 2. **Açı tespiti hatası duruyor.** Messi'nin yandan çekilmiş antrenman klibine "önden" diyor. Omuz genişliğine bakan bir düzeltme denedim, ama senin yandan şutunu "arkadan" sandı (vuruş anında gövde dönüyor). Kural gereği geri aldım: `deneme/aci-tespiti-omuz` dalında duruyor.
 3. **Tarama yavaş.** Ekran kapanınca tarayıcı sayfayı yavaşlatıyor, gece kare başına 5 saniyeye çıktı. Kalabalık yayın görüntülerinde bir klip 25 dakika sürdü.
 
