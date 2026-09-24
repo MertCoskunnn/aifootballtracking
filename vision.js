@@ -16,8 +16,8 @@ import { PoseLandmarker, ObjectDetector, FilesetResolver } from './vendor/mediap
 // kutusunda BlazePose başarısız olunca devreye girer (aşağıdaki personBoxes döngüsü). Ağır
 // (TF.js/model) iş movenet.js'te, saf 17→33 nokta dönüşümü keypoints.js'te (Node testli) —
 // bu dosya sadece ikisini birbirine bağlar.
-import * as movenet from './movenet.js?v=30';
-import { mapCocoToMediapipe, acceptMoveNetPose } from './keypoints.js?v=30';
+import * as movenet from './movenet.js?v=31';
+import { mapCocoToMediapipe, acceptMoveNetPose } from './keypoints.js?v=31';
 // cp-15-kalite-kapisi: "sabit kameralı, net idman videosu" ürün kararı (PRODUCT-PLAN.md). Saf
 // hesaplama quality.js'te (Node testli); burada sadece her karenin küçük gri kopyasını üretip
 // frame.gray'e koyuyoruz (kamera-sabitliği için) — kimin vuruş olduğunu bilmeyiz, karar
@@ -25,10 +25,14 @@ import { mapCocoToMediapipe, acceptMoveNetPose } from './keypoints.js?v=30';
 // cp-16-netlik: ayrıca her karede vuran adayın (top varsa top, yoksa en yakın oyuncu) çevresinde
 // GERÇEK çözünürlükte (ölçeksiz) bir kırpıntıdan Laplacian varyansı hesaplayıp frame.sharp'a
 // yazıyoruz — 64x36'da oyuncu birkaç piksele indiği için o kapı anlamsızdı (bkz. quality.js başı).
-import { rgbaToGray, laplacianVariance, round2, SHRINK_W, SHRINK_H, SHARP_MIN, SHARP_MAX } from './quality.js?v=30';
+import { rgbaToGray, laplacianVariance, round2, SHRINK_W, SHRINK_H, SHARP_MIN, SHARP_MAX } from './quality.js?v=31';
 // cp-17-top-birlesimi: aynı topun birden fazla kırpıntıda bulunup iki kez sayılmasını önleyen
 // birleştirme (IoU + merkez-mesafesi, saf fonksiyon, Node testli). Detay: balls.js başı.
-import { mergeBallDetections } from './balls.js?v=30';
+import { mergeBallDetections } from './balls.js?v=31';
+// Artifact paketi .tflite/.task'ı da (application/octet-stream reddediliyor) base64 '.b64.txt'ye
+// çevirip yayınlıyor (bkz. scripts/artifact-paketle.mjs) — modelAssetPath yerine baytları kendimiz
+// okuyup modelAssetBuffer ile veriyoruz, hem yerelde hem Artifact'te aynı yol çalışsın diye.
+import { loadModelBytes } from './modelLoader.js?v=31';
 
 // import.meta.url tabanlı: sayfa index.html'den de tests/*.html gibi alt dizinden de doğru çözülür.
 const BASE = new URL('./vendor/mediapipe/wasm', import.meta.url).href;
@@ -39,17 +43,30 @@ const CROP = 320; // kırpıntının modele verildiği boyut (piksel)
 let models = null;
 async function load() {
   if (models) return models;
-  const fs = await FilesetResolver.forVisionTasks(BASE);
+  // Artifact paketi 64 MB sınırı için vision_wasm_nosimd_* dosyalarını içermiyor (bkz.
+  // scripts/artifact-paketle.mjs) — modern telefonlar SIMD destekler. Desteklemeyen bir
+  // tarayıcıda MediaPipe'ın kendisi nosimd dosyasını sessizce 404'e düşürüp anlaşılmaz bir hata
+  // verirdi; burada önceden kontrol edip anlaşılır bir mesajla durduruyoruz.
+  if (!(await FilesetResolver.isSimdSupported())) {
+    throw new Error('Bu tarayıcı/cihaz WebAssembly SIMD desteklemiyor. Artifact paketi boyut sınırı '
+      + '(64 MB) yüzünden nosimd yedek dosyasını içermiyor — güncel bir tarayıcı/cihaz gerekli.');
+  }
+  const [fs, poseBytes, ballBytes] = await Promise.all([
+    FilesetResolver.forVisionTasks(BASE),
+    loadModelBytes(POSE_MODEL),
+    loadModelBytes(BALL_MODEL),
+  ]);
   // IMAGE modu: kareleri sırayla ama bağımsız işleriz. VIDEO modu kesin artan zaman damgası ister,
   // bu da aynı videoyu ikinci kez işlerken ya da ileri-geri atlarken hata verir.
   // poseOne: kırpılmış tek kişilik görüntüler için. Uzak/kalabalık çekimde (Messi–Liverpool yayını,
   // oyuncular ~120 px) tam kare iskelet modeli hiç kimse bulamadı. Nesne modeli ise insanları kutu
   // olarak buldu. Kutuyu kırpıp büyütünce iskelet çıktı (0 → 3-5 kişi/kare).
-  // Aynı nesne modeli hem topu hem insanı arar (tek çağrı).
+  // Aynı nesne modeli hem topu hem insanı arar (tek çağrı). poseBytes iki modelde de (pose/poseOne)
+  // aynı Uint8Array — MediaPipe her createFromOptions çağrısında kendi wasm belleğine kopyalıyor.
   const [pose, poseOne, ball] = await Promise.all([
-    PoseLandmarker.createFromOptions(fs, { baseOptions: { modelAssetPath: POSE_MODEL, delegate: 'GPU' }, runningMode: 'IMAGE', numPoses: 3 }),
-    PoseLandmarker.createFromOptions(fs, { baseOptions: { modelAssetPath: POSE_MODEL, delegate: 'GPU' }, runningMode: 'IMAGE', numPoses: 1 }),
-    ObjectDetector.createFromOptions(fs, { baseOptions: { modelAssetPath: BALL_MODEL, delegate: 'GPU' }, runningMode: 'IMAGE', categoryAllowlist: ['sports ball', 'person'], scoreThreshold: 0.12, maxResults: 25 }),
+    PoseLandmarker.createFromOptions(fs, { baseOptions: { modelAssetBuffer: poseBytes, delegate: 'GPU' }, runningMode: 'IMAGE', numPoses: 3 }),
+    PoseLandmarker.createFromOptions(fs, { baseOptions: { modelAssetBuffer: poseBytes, delegate: 'GPU' }, runningMode: 'IMAGE', numPoses: 1 }),
+    ObjectDetector.createFromOptions(fs, { baseOptions: { modelAssetBuffer: ballBytes, delegate: 'GPU' }, runningMode: 'IMAGE', categoryAllowlist: ['sports ball', 'person'], scoreThreshold: 0.12, maxResults: 25 }),
   ]);
   return (models = { pose, poseOne, ball });
 }

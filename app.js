@@ -12,12 +12,12 @@
 // şeyler: iskeletin oturması (buildTrack), topun bulunması ve temas karesinin bulunması (findKicks) —
 // bunlar hâlâ detect.js/pipeline.js'te. classifyView/suggestMode artık modu/açıyı SEÇMİYOR, sadece
 // "seçtiğin açı ile videonun görünüşü uyuşmuyor" diye yumuşak bir uyarı için kullanılıyor (viewWarning).
-import * as pipeline from './pipeline.js?v=30';
-import { measure, measureFreeKick, buildTrack } from './metrics.js?v=30';
-import { evaluate } from './coach.js?v=30';
-import { fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=30';
-import { getRuleSet } from './rules.js?v=30';
-import { pickTrackedPerson, pickDisplayBall, pickLiveDisplay, nearestBallWidth } from './display.js?v=30';
+import * as pipeline from './pipeline.js?v=31';
+import { measure, measureFreeKick, buildTrack } from './metrics.js?v=31';
+import { evaluate } from './coach.js?v=31';
+import { fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=31';
+import { getRuleSet } from './rules.js?v=31';
+import { pickTrackedPerson, pickDisplayBall, pickLiveDisplay, nearestBallWidth } from './display.js?v=31';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');

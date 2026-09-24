@@ -7,6 +7,12 @@
 //
 // Tembel yükleme: TF.js (~1.3 MB) ve model (~12.5 MB) sadece MoveNet gerçekten gerekince iner.
 // Yandan çekimlerde BlazePose zaten herkesi buluyor, bu yol hiç tetiklenmez.
+// Artifact paketi .bin shard'larını da (application/octet-stream reddediliyor) base64 '.b64.txt'ye
+// çevirip yayınlıyor (bkz. scripts/artifact-paketle.mjs). tf.loadGraphModel bunu bilmiyor (doğrudan
+// .bin fetch eder), o yüzden model.json + shard'ları kendimiz loadModelBytes ile okuyup
+// tf.io.fromMemory'e veriyoruz — yerelde de (ham .bin dosyaları duruyor) aynı yol çalışır.
+import { loadModelBytes, concatBytes } from './modelLoader.js?v=31';
+
 const TFJS_URL = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js';
 const MODEL_URL = new URL('./models/movenet-thunder/model.json', import.meta.url);
 
@@ -44,7 +50,30 @@ export async function loadMoveNetModel() {
   tf.env().set('SOFTWARE_WEBGL_ENABLED', true);
   try { await tf.setBackend('webgl'); } catch { /* webgl yoksa tf'nin varsayılan backend'inde devam */ }
   await tf.ready();
-  return tf.loadGraphModel(MODEL_URL.href);
+  return loadGraphModelFromShards(tf);
+}
+
+// tf.loadGraphModel(url) kendi içinde .bin shard'larını DOĞRUDAN fetch eder — Artifact paketinde
+// bunlar yok (yalnızca '<ad>.bin.b64.txt' var, bkz. dosya başı). Onun yerine model.json'u ve
+// shard'ları loadModelBytes ile (ham .bin yerelde, .b64.txt Artifact'te) kendimiz okuyup
+// tf.io.fromMemory'e tek parça weightData olarak veriyoruz — ağırlık baytları shard sınırlarından
+// bağımsız sıralı bir akış olduğu için (shard'lara bölünme sadece dosya boyutu sınırı), tüm
+// shard'ları sırayla birleştirmek orijinal tf.loadGraphModel ile aynı sonucu üretir.
+async function loadGraphModelFromShards(tf) {
+  const modelJsonBytes = await loadModelBytes(MODEL_URL.href);
+  const { modelTopology, weightsManifest } = JSON.parse(new TextDecoder().decode(modelJsonBytes));
+
+  const weightSpecs = [];
+  const chunks = [];
+  for (const group of weightsManifest) {
+    weightSpecs.push(...group.weights);
+    for (const shardPath of group.paths) {
+      const shardUrl = new URL(shardPath, MODEL_URL).href;
+      chunks.push(await loadModelBytes(shardUrl));
+    }
+  }
+  const weightData = concatBytes(chunks).buffer;
+  return tf.loadGraphModel(tf.io.fromMemory({ modelTopology, weightSpecs, weightData }));
 }
 
 /**

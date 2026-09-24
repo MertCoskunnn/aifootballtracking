@@ -9,6 +9,7 @@
   "index.html": "index.html",
   "keypoints.js": "keypoints.js",
   "metrics.js": "metrics.js",
+  "modelLoader.js": "modelLoader.js",
   "models/mediapipe/efficientdet_lite0.tflite": "models/mediapipe/efficientdet_lite0.tflite",
   "models/mediapipe/pose_landmarker_full.task": "models/mediapipe/pose_landmarker_full.task",
   "models/movenet-thunder/group1-shard1of3.bin": "models/movenet-thunder/group1-shard1of3.bin",

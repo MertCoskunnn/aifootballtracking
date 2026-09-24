@@ -8,7 +8,7 @@
 // ve app.js'in "elle düzelt" akışı aynen çalışır. rules.js'teki getRuleSet(mode, foot, angle)
 // ise app.js'in ölçmeden ÖNCE "bu açıdan bu vuruş türü ölçülür mü, referans kim" sorusuna
 // cevap verdiği ayrı bir katman (app.js runAnalysis).
-import { RULES, CONTEXT_OVERRIDES, MIN_COVERAGE } from './rules.js?v=30';
+import { RULES, CONTEXT_OVERRIDES, MIN_COVERAGE } from './rules.js?v=31';
 
 export { MIN_COVERAGE };
 
