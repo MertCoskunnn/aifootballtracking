@@ -5,3 +5,8 @@ test-videolar/
 *.MOV
 *.webm
 *.avi
+
+# Üçüncü taraf model/kütüphane ikilileri: Google'dan indirildi, repoya girmesin.
+# scripts/artifact-dosyalar.mjs bunları yerelden okuyup Artifact'e paketler.
+models/mediapipe/
+vendor/mediapipe/

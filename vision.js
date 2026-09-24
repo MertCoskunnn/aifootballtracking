@@ -6,14 +6,18 @@
 // Uzaktaki gri top tam karede neredeyse hiç bulunamadı (361 karenin 15'i). Aynı kareler
 // oyuncunun ayak çevresi kırpılıp büyütülünce top 0.57 güvenle bulundu. Nesne modeli küçük
 // nesnelerde zayıf, kırpıp büyütmek topu modelin gözünde büyütüyor.
-import { PoseLandmarker, ObjectDetector, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/vision_bundle.mjs';
+// Artifact barındırmasında (claude.ai) CSP sadece <script> ile cdn.jsdelivr.net'e izin verir;
+// fetch/XHR (bu paketin wasm yükleyicisi dahil) jsdelivr'a bile kapalı. Bu yüzden paket ve
+// wasm/ altındaki ikili dosyalar vendor/mediapipe/ içine indirilip buradan yerel import edildi
+// (bkz. BASE aşağıda). CDN'den YALNIZCA <script> etiketiyle çekilen TF.js (movenet.js) etkilenmez.
+import { PoseLandmarker, ObjectDetector, FilesetResolver } from './vendor/mediapipe/vision_bundle.mjs';
 // cp-12-movenet: "ikinci göz". BlazePose kişiyi bulurken yüze dayanıyor; sırtı kameraya dönük
 // oyuncuda (arkadan çekilmiş frikik) hiç iskelet çıkmıyor. MoveNet yüze bağımlı değil, aynı kişi
 // kutusunda BlazePose başarısız olunca devreye girer (aşağıdaki personBoxes döngüsü). Ağır
 // (TF.js/model) iş movenet.js'te, saf 17→33 nokta dönüşümü keypoints.js'te (Node testli) —
 // bu dosya sadece ikisini birbirine bağlar.
-import * as movenet from './movenet.js?v=29';
-import { mapCocoToMediapipe, acceptMoveNetPose } from './keypoints.js?v=29';
+import * as movenet from './movenet.js?v=30';
+import { mapCocoToMediapipe, acceptMoveNetPose } from './keypoints.js?v=30';
 // cp-15-kalite-kapisi: "sabit kameralı, net idman videosu" ürün kararı (PRODUCT-PLAN.md). Saf
 // hesaplama quality.js'te (Node testli); burada sadece her karenin küçük gri kopyasını üretip
 // frame.gray'e koyuyoruz (kamera-sabitliği için) — kimin vuruş olduğunu bilmeyiz, karar
@@ -21,14 +25,15 @@ import { mapCocoToMediapipe, acceptMoveNetPose } from './keypoints.js?v=29';
 // cp-16-netlik: ayrıca her karede vuran adayın (top varsa top, yoksa en yakın oyuncu) çevresinde
 // GERÇEK çözünürlükte (ölçeksiz) bir kırpıntıdan Laplacian varyansı hesaplayıp frame.sharp'a
 // yazıyoruz — 64x36'da oyuncu birkaç piksele indiği için o kapı anlamsızdı (bkz. quality.js başı).
-import { rgbaToGray, laplacianVariance, round2, SHRINK_W, SHRINK_H, SHARP_MIN, SHARP_MAX } from './quality.js?v=29';
+import { rgbaToGray, laplacianVariance, round2, SHRINK_W, SHRINK_H, SHARP_MIN, SHARP_MAX } from './quality.js?v=30';
 // cp-17-top-birlesimi: aynı topun birden fazla kırpıntıda bulunup iki kez sayılmasını önleyen
 // birleştirme (IoU + merkez-mesafesi, saf fonksiyon, Node testli). Detay: balls.js başı.
-import { mergeBallDetections } from './balls.js?v=29';
+import { mergeBallDetections } from './balls.js?v=30';
 
-const BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm';
-const POSE_MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task';
-const BALL_MODEL = 'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/latest/efficientdet_lite0.tflite';
+// import.meta.url tabanlı: sayfa index.html'den de tests/*.html gibi alt dizinden de doğru çözülür.
+const BASE = new URL('./vendor/mediapipe/wasm', import.meta.url).href;
+const POSE_MODEL = new URL('./models/mediapipe/pose_landmarker_full.task', import.meta.url).href;
+const BALL_MODEL = new URL('./models/mediapipe/efficientdet_lite0.tflite', import.meta.url).href;
 const CROP = 320; // kırpıntının modele verildiği boyut (piksel)
 
 let models = null;
