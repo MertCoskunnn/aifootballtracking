@@ -68,6 +68,7 @@ Testler: 194/194. Hepsi yerel commit, push yok.
 | c9b1dc7 | **Teşhis motoru**: outcome.js (top ne yaptı) + sebep.js (neden-sonuç tablosu, kaynaklı) + rapor başında "Ne oldu / Neden / Nasıl düzelir". Tablo: SEBEP-SONUC.md | Referans 9: "Top yana kıvrıldı, çünkü vuruştan sonra ayağın gövdenin önünden fazla çaprazladı" |
 | fb22a83 | TikTok bitiş ekranı ve sahne kesmesi: vuruş aranmaz, takip kesmeden geçmez | Eşikler 9 referans videosunda ölçüldü (bitiş ekranı 7/7) |
 | ad00854 | Kameradan uzaklaşan topun yüksekliği yandan okunmaz, yanlış "havalandı" demez | Messi klibinde bulundu |
+| 0164336 | **Emin olmadığını kesin söylemesin:** top sonucu 5 pencerede okunur, sadece %80 tutarlı etiket rapora girer | Referans 9: okumalar tutarsız (sağ/düz/sağ/düz/sol) → artık "uçuş net okunamadı" diyor, "çünkü" demiyor |
 | 3ff9893 | Top izi yanlış nesneye bağlanmasın: uçuş hızı, hız kopukluğu, iz temastan 0.2 sn içinde başlamalı, en iyi aday elenirse sıradaki | Referans 9: iz ve teşhis çalışıyor. Messi: iz artık çizilmiyor (yanlış iz yerine iz yok) |
 
 Messi (yandan, şut, sol) hâlâ **100**. **Bilinen eksik:** Messi klibinde gerçek top adaylarda var ama iz kurulamıyor (temas topunun boyutu yanlış ölçülüyor, 66 px; gerçek top ~20 px). Sıradaki işlerden biri. Telefon sürümü güncellendi (aynı bağlantı). Testler 229/229.
@@ -77,3 +78,5 @@ Messi (yandan, şut, sol) hâlâ **100**. **Bilinen eksik:** Messi klibinde ger�
 - Arkadan çekimde yükseklik, yandan çekimde sağ-sol okunmuyor (tek kameranın sınırı). Rapor bunu saklamıyor, söylüyor.
 
 **Senden (kısa):** 5-10 videona tek kelimelik etiket: "havalandı", "sağa kaçtı", "güçsüz", "iyiydi". Dosya adına yazman yeter (ör. `havalandi_mert3.mp4`). Uygulamanın topu doğru okuyup okumadığını ve puanın iyiyi kötüden ayırıp ayırmadığını bununla ölçeceğim, eşikleri ona göre ayarlayacağım.
+
+**En önemli dürüst bulgu:** Bu düşük çözünürlüklü (~480x850) videolarda topun yönünü ve falsosunu 4-6 tespitten güvenilir okuyamıyoruz. Önceki rapor "Top yana kıvrıldı, çünkü..." diyordu ama bu okuma gürültüydü. Şimdi uygulama bunu kabul ediyor. Neden-sonuç zinciri ancak top net okunduğunda "çünkü" diyecek. Daha iyi okuma için: 60 fps ve telefondan doğrudan (WhatsApp'tan geçirmeden) yükleme.
