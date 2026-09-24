@@ -2,12 +2,18 @@
 // TF.js/MoveNet/DOM gerekmez — sahte COCO-17 dizileriyle test edilir.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mapCocoToMediapipe, acceptMoveNetPose, legScore, MN_VIS_SCALE, MN_MIN_LEG_SCORE } from '../keypoints.js';
+import { mapCocoToMediapipe, acceptMoveNetPose, legScore, plausibleAnatomy, MN_VIS_SCALE, MN_MIN_LEG_SCORE } from '../keypoints.js';
 
 // Her COCO noktasına ayırt edici bir x/y/score verir ki yanlış indeksten okunursa test yakalasın.
 // coco[i] = { x: i/100, y: i/200, score: i/20 } (i: 0..16)
 function fakeCoco() {
   return new Array(17).fill(0).map((_, i) => ({ x: i / 100, y: i / 200, score: i / 20 }));
+}
+
+// Ayakta duran insan: omuz 0.3, kalça 0.5, diz 0.7, ayak bileği 0.9 (kırpıntıya göre y).
+function standing(score = 0) {
+  const y = [0.2, 0.18, 0.18, 0.2, 0.2, 0.3, 0.3, 0.4, 0.4, 0.5, 0.5, 0.5, 0.5, 0.7, 0.7, 0.9, 0.9];
+  return y.map((v) => ({ x: 0.5, y: v, score }));
 }
 
 test('mapCocoToMediapipe: doğrudan eşlenen 17 nokta doğru COCO indeksinden geliyor (x0=0,y0=0,s=1)', () => {
@@ -73,7 +79,7 @@ test('legScore: kalça+diz+bilek (COCO 11-16) ortalaması', () => {
 });
 
 test('acceptMoveNetPose: bacak güveni eşiğin üstündeyse kabul, altındaysa red', () => {
-  const high = fakeCoco().map((p) => ({ ...p, score: 0 }));
+  const high = standing();
   for (const i of [11, 12, 13, 14, 15, 16]) high[i].score = 0.9;
   assert.equal(acceptMoveNetPose(high), true);
 
@@ -82,11 +88,26 @@ test('acceptMoveNetPose: bacak güveni eşiğin üstündeyse kabul, altındaysa 
 });
 
 test('acceptMoveNetPose: varsayılan eşik MN_MIN_LEG_SCORE ile birebir aynı sınırda çalışır', () => {
-  const boundary = fakeCoco().map((p) => ({ ...p, score: 0 }));
+  const boundary = standing();
   for (const i of [11, 12, 13, 14, 15, 16]) boundary[i].score = MN_MIN_LEG_SCORE;
   assert.equal(acceptMoveNetPose(boundary), true, 'eşiğe eşitse kabul edilmeli (>=)');
 
-  const justBelow = fakeCoco().map((p) => ({ ...p, score: 0 }));
+  const justBelow = standing();
   for (const i of [11, 12, 13, 14, 15, 16]) justBelow[i].score = MN_MIN_LEG_SCORE - 0.01;
   assert.equal(acceptMoveNetPose(justBelow), false);
+});
+
+test('plausibleAnatomy: bulut iskeleti (ters/ezik vücut) reddedilir, ayaktaki insan kabul', () => {
+  assert.equal(plausibleAnatomy(standing()), true);
+  const upsideDown = standing().map((p) => ({ ...p, y: 1 - p.y }));
+  assert.equal(plausibleAnatomy(upsideDown), false, 'ayak başın üstünde');
+  const flat = standing().map((p) => ({ ...p, y: 0.5 }));
+  assert.equal(plausibleAnatomy(flat), false, 'tüm noktalar tek çizgide (bulut şeridi)');
+  const stubby = standing(); stubby[15].y = stubby[16].y = 0.52;
+  assert.equal(plausibleAnatomy(stubby), false, 'bacak gövdeye göre çok kısa');
+});
+
+test('acceptMoveNetPose: bacak güveni yüksek ama anatomi saçmaysa red', () => {
+  const cloud = standing(0.9).map((p) => ({ ...p, y: 1 - p.y }));
+  assert.equal(acceptMoveNetPose(cloud), false);
 });

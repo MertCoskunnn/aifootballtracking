@@ -16,7 +16,8 @@ export const MN_VIS_SCALE = 1;
 // Kabul eşiği: kalça+diz+bilek (6 nokta) skor ortalaması bunun altındaysa MoveNet sonucu atılır.
 // Nesne modelinin bulduğu ama aslında insan olmayan (ya da bacakları kadraj dışı kalan) bir
 // kutuda MoveNet çöp iskelet üretebilir; bacak güveni düşükse bu kutuyu hiç değerlendirmeyiz.
-export const MN_MIN_LEG_SCORE = 0.3;
+// 0.3 → 0.45 (2026-09-24): bulut kutularında 0.3 geçiliyordu.
+export const MN_MIN_LEG_SCORE = 0.45;
 
 // COCO-17 → MediaPipe-33: doğrudan karşılığı olan 17 nokta. [mediaPipeIndex, cocoIndex].
 // (Kaynak: GECE-PLANI cp-12-movenet mimari kararı — COCO sırası: 0 burun, 1/2 göz, 3/4 kulak,
@@ -51,9 +52,24 @@ export function legScore(coco) {
   return sum / LEG_INDEXES.length;
 }
 
-/** MoveNet sonucu kabul edilsin mi? (bkz. MN_MIN_LEG_SCORE) */
+/**
+ * Anatomi kontrolü (bulut iskeleti hatası, 2026-09-24 sabahı): nesne modeli bulutu kişi sanınca
+ * MoveNet gürültüden iskelet uydurabiliyor. Gerçek ayaktaki insanda (y aşağı doğru artar):
+ * omuz < kalça < ayak bileği, ve bacak boyu gövdeye göre makul. Diz tek başına kalçanın
+ * üstüne çıkabilir (kurma, takip), o yüzden diz sıralamaya katılmaz.
+ */
+export function plausibleAnatomy(coco) {
+  const mid = (a, b) => (coco[a].y + coco[b].y) / 2;
+  const shoulder = mid(5, 6), hip = mid(11, 12), ankle = Math.max(coco[15].y, coco[16].y);
+  const torso = hip - shoulder, leg = ankle - hip;
+  if (!(torso > 0.03) || !(leg > 0)) return false;
+  const ratio = leg / torso; // insanda ~1.5-2; eğilme/koşu için geniş tolerans
+  return ratio > 0.6 && ratio < 4;
+}
+
+/** MoveNet sonucu kabul edilsin mi? (bkz. MN_MIN_LEG_SCORE, plausibleAnatomy) */
 export function acceptMoveNetPose(coco, minScore = MN_MIN_LEG_SCORE) {
-  return legScore(coco) >= minScore;
+  return legScore(coco) >= minScore && plausibleAnatomy(coco);
 }
 
 /**
