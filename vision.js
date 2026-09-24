@@ -14,6 +14,10 @@ import { PoseLandmarker, ObjectDetector, FilesetResolver } from 'https://cdn.jsd
 // bu dosya sadece ikisini birbirine bağlar.
 import * as movenet from './movenet.js?v=25';
 import { mapCocoToMediapipe, acceptMoveNetPose } from './keypoints.js?v=25';
+// cp-15-kalite-kapisi: "sabit kameralı, net idman videosu" ürün kararı (PRODUCT-PLAN.md). Saf
+// hesaplama quality.js'te (Node testli); burada sadece her karenin küçük gri kopyasını üretip
+// frame.gray'e koyuyoruz — kimin vuruş olduğunu bilmeyiz, karar analysis.js'te (collectKicks).
+import { rgbaToGray, SHRINK_W, SHRINK_H } from './quality.js?v=25';
 
 const BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm';
 const POSE_MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task';
@@ -126,6 +130,12 @@ export async function processRange(video, { t0 = 0, t1 = video.duration, fps = 3
   // burada yeniden boyutlandırmak onu temizleyip ball-tarama döngüsündeki kullanımını bozardı.
   const mnCv = Object.assign(document.createElement('canvas'), { width: MOVENET_INPUT, height: MOVENET_INPUT });
   const mnCtx = mnCv.getContext('2d');
+  // cp-15-kalite-kapisi: kalite kapıları (kamera sabitliği/netlik) için küçük gri kopya. Tuval
+  // döngü DIŞINDA tek kez oluşturulur (frameCv/cropCv/mnCv ile aynı desen). clearRect gerekmez:
+  // her karede drawImage tuvalin TAMAMINI (0,0→SHRINK_W,SHRINK_H) baştan yazıyor. Sadece bir
+  // drawImage+getImageData eklendi, tarama hızını modellerin yanında belirgin etkilemez.
+  const qualityCv = Object.assign(document.createElement('canvas'), { width: SHRINK_W, height: SHRINK_H });
+  const qctx = qualityCv.getContext('2d', { willReadFrequently: true });
   const total = Math.max(1, Math.floor((t1 - t0) * fps));
   const frames = [];
   let lastBall = null;
@@ -182,7 +192,11 @@ export async function processRange(video, { t0 = 0, t1 = video.duration, fps = 3
     const merged = dedupe(balls);
     const bestNear = merged.sort((a, b) => b.s - a.s)[0];
     if (bestNear) lastBall = bestNear;
-    const frame = { t, people, balls: merged };
+    // cp-15-kalite-kapisi: küçük gri kopya + orijinal karadan bu kopyaya ölçek oranı (sx,sy) —
+    // quality.js kutuları (oyuncu/top) bu oranla küçültülmüş uzaya çevirir (bkz. assessKickQuality).
+    qctx.drawImage(frameCv, 0, 0, W, H, 0, 0, SHRINK_W, SHRINK_H);
+    const gray = rgbaToGray(qctx.getImageData(0, 0, SHRINK_W, SHRINK_H).data, SHRINK_W, SHRINK_H);
+    const frame = { t, people, balls: merged, gray: { data: gray, w: SHRINK_W, h: SHRINK_H, sx: SHRINK_W / W, sy: SHRINK_H / H } };
     frames.push(frame);
     onFrame?.(frame, i, total);
   }
