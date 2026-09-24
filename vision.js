@@ -12,8 +12,8 @@ import { PoseLandmarker, ObjectDetector, FilesetResolver } from 'https://cdn.jsd
 // kutusunda BlazePose başarısız olunca devreye girer (aşağıdaki personBoxes döngüsü). Ağır
 // (TF.js/model) iş movenet.js'te, saf 17→33 nokta dönüşümü keypoints.js'te (Node testli) —
 // bu dosya sadece ikisini birbirine bağlar.
-import * as movenet from './movenet.js?v=19';
-import { mapCocoToMediapipe, acceptMoveNetPose } from './keypoints.js?v=19';
+import * as movenet from './movenet.js?v=22';
+import { mapCocoToMediapipe, acceptMoveNetPose } from './keypoints.js?v=22';
 
 const BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm';
 const POSE_MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task';

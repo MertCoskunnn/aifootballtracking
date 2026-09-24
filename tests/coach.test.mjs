@@ -45,9 +45,16 @@ test('coach: NaN ölçüm "ölçülemedi" gösterir ve puana katılmaz', () => {
   assert.ok(res.total >= 98, `total ${res.total}`);
 });
 
-test('coach: tüm ölçümler NaN ise hata fırlatır', () => {
+// cp-14a-olcum-yeterliligi: eskiden burada hata fırlatılırdı. Artık evaluate() çökmüyor,
+// kapsam (coverage) MIN_COVERAGE'ın altında kaldığı için "insufficient" bir sonuç dönüyor.
+test('coach: tüm ölçümler NaN ise hata fırlatmaz, insufficient sonuç döner', () => {
   const allNaN = Object.fromEntries(Object.keys(GOOD_SHOT).map((k) => [k, NaN]));
-  assert.throws(() => evaluate(allNaN, 'shot'));
+  const res = evaluate(allNaN, 'shot');
+  assert.equal(res.total, null);
+  assert.equal(res.insufficient, true);
+  assert.equal(res.coverage, 0);
+  assert.equal(res.focus.length, 0);
+  assert.match(res.verdict, /ölçülemedi/);
 });
 
 // cp-08-metrikler: METRICS.md'deki elit-benzeri şut (Lees 2010 / Petrolo 2024 orta noktalarına yakın)

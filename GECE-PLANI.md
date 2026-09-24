@@ -19,6 +19,8 @@
 | 4 | cp-11-evreler | Evre bulucu (yaklaşma, basış, kurma, temas, takip), pencereler saniyeyle | Sonnet | ✅ |
 | 5 | cp-12-movenet | Adaptör (17→33), movenet.js, vision.js yedek yolu, MoveNet iskeleti farklı renk | Sonnet | ✅ |
 | 6 | cp-13-vurus-turleri | Plase modu, hareketli top ayrımı, kural setleri, otomatik tür önerisi | Sonnet | ✅ |
+| 6b | cp-14a-olcum-yeterliligi | (Referans taramasında bulundu) Tek madde ölçülüp 100 puan verilmesin: ağırlık kapsamı %50 altındaysa puan yok, "ölçüm yetersiz" + çekim önerisi | Sonnet | ✅ |
+| 6c | cp-14b-aci-tespiti | (Referans verisinden) Açıyı koşudan değil vücut yöneliminden oku: omuz genişliği/gövde boyu (yandan küçük), sol omuzun tarafı (önden/arkadan). Messi antrenmanı "önden" sanılıyordu | Sonnet | ❌ gerçek videoda başarısız (K2 88→62), `deneme/aci-tespiti-omuz` dalında. Sonraki fikir: temastan önceki koşu karelerinde yönelim |
 | 7 | cp-14-referans-dogrulama | Referans kliplerle kalibrasyon, METRICS.md güncelleme | Frodo | bekliyor (5,6) |
 
 ## Kabul kapıları (her checkpoint)

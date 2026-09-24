@@ -3,17 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Regresyon kontrolü — Futbol AI Hoca</title>
-  <!-- cp-10-regresyon: aynı style.css'i kullanır (renk değişkenleri), sadece tablo için birkaç
-       ek kural burada, style.css'e dokunmuyoruz (o dosya asıl uygulamanın arayüzüne ait). -->
+  <title>Referans klip toplu analiz — Futbol AI Hoca</title>
+  <!-- cp-14-referans-toplu: regresyon.html ile aynı kalıp (style.css'e dokunmuyoruz, sadece
+       tablo için birkaç ek kural burada). Bu sayfa PASS/FAIL değil, ham ölçüm toplama aracı:
+       Frodo bu ölçümlerle eşikleri kalibre edecek. -->
   <link rel="stylesheet" href="../style.css?v=22">
   <style>
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: .85rem; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: .82rem; }
     th, td { text-align: left; padding: 6px 8px; border-top: 1px solid var(--line); vertical-align: top; }
-    tr.pass td:last-child { color: var(--pitch); font-weight: 700; }
-    tr.fail td:last-child { color: var(--bad); font-weight: 700; }
-    tr.pass { background: rgba(61, 220, 132, .06); }
-    tr.fail { background: rgba(255, 93, 93, .08); }
+    tr.hata td:last-child { color: var(--bad); font-weight: 700; }
+    tr.hata { background: rgba(255, 93, 93, .08); }
+    tr.ok { background: rgba(61, 220, 132, .05); }
     td.skip { color: var(--muted); font-style: italic; }
     td.info { color: var(--muted); }
     .stage { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
@@ -24,14 +24,14 @@
 </head>
 <body>
   <header>
-    <h1>Regresyon kontrolü</h1>
-    <p class="sub">Referans klipler için "Messi hâlâ 100 mü, Mert hâlâ 82/88 mi" kontrolü — tek tık.</p>
+    <h1>Referans klip toplu analiz</h1>
+    <p class="sub">18 referans klipte uygulamanın kendi hattını çalıştırıp ham ölçümleri toplar (cp-14, Frodo'nun eşik kalibrasyon aracı).</p>
   </header>
   <main>
     <section class="panel">
       <p class="hint">
-        Mod: <b id="modLabel"></b> (değiştirmek için URL'e <code>?mod=tam</code> ya da <code>?mod=pencere</code> ekle).
-        Otomatik başlatmak için <code>?auto=1</code>.
+        Otomatik başlatmak için <code>?auto=1</code>. Tek klip için <code>?only=&lt;dosya-adı-parçası&gt;</code>,
+        ilk N klip için <code>?max=N</code>.
       </p>
       <button id="runBtn" class="primary">Taramayı başlat</button>
       <div class="stage">
@@ -45,8 +45,10 @@
       <table id="results">
         <thead>
           <tr>
-            <th>Video</th><th>Zaman: beklenen/bulunan (sn)</th><th>Ayak</th><th>Açı</th><th>Mod</th>
-            <th>Puan</th><th>Ş1..Ş8</th><th>Süre (sn)</th><th>Sonuç</th>
+            <th>Video</th><th>Kategori</th><th>Vuruş sayısı</th>
+            <th>İlk vuruş: t / ayak / açı / hareketli top</th>
+            <th>Shot</th><th>Placement</th><th>Freekick</th>
+            <th>Video / işleme süresi (sn)</th><th>Sonuç</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -54,6 +56,6 @@
       <p id="summary"></p>
     </section>
   </main>
-  <script type="module" src="regresyon.js"></script>
+  <script type="module" src="referans.js?v=22"></script>
 </body>
 </html>

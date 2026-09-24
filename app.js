@@ -7,9 +7,9 @@
 // tarayıcıda çalışan regresyon kontrol sayfası (tests/regresyon.html) AYNI kodu çalıştırmalı,
 // yoksa "Messi hâlâ 100 mü" kontrolü sadece burada doğru, orada yanlış olabilir. Bu dosyada artık
 // sadece arayüz ve akış var; tarama adımlarının kendisi pipeline.js'te.
-import * as pipeline from './pipeline.js?v=19';
-import { measure, measureFreeKick, buildTrack } from './metrics.js?v=19';
-import { evaluate } from './coach.js?v=19';
+import * as pipeline from './pipeline.js?v=22';
+import { measure, measureFreeKick, buildTrack } from './metrics.js?v=22';
+import { evaluate } from './coach.js?v=22';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');
@@ -460,9 +460,12 @@ function renderReport(res, mode, warning) {
   // Ş5 (temas anındaki diz) ölçüldüyse 60 fps ipucu göster: METRICS.md'deki 30 fps bulanıklığı notu.
   const s5 = res.items.find((i) => i.ref === 'Ş5');
   const s5Measured = s5 && s5.score !== null;
+  // cp-14a-olcum-yeterliligi: coach.js kapsam yetersizse total:null, insufficient:true döner
+  // (Ronaldo'nun arkadan çekilmiş şutunda tek madde ölçülüp gerisi "ölçülemedi" iken eskiden
+  // yanıltıcı bir 100 puan çıkıyordu). Puan yerine "—" göster, madde listesi yine aşağıda çıksın.
   el.innerHTML = `
     <h2>${MODE_TITLE[mode] ?? 'Pas'} raporu</h2>
-    <div class="score"><span class="big">${res.total}</span><span>/ 100</span></div>
+    <div class="score"><span class="big">${res.insufficient ? '—' : res.total}</span>${res.insufficient ? '' : '<span>/ 100</span>'}</div>
     <div class="coach">${res.verdict}${res.focus.length ? '<br><br><b>Odaklan:</b><br>' + res.focus.map((f) => `${f.tip}${f.drill ? `<br><span class="hint">Alıştırma: ${f.drill}</span>` : ''}`).join('<br><br>') : ''}</div>
     ${warning ? `<p class="warn">${warning}</p>` : ''}
     ${res.movingBall ? '<p class="hint">Top hareketliydi: hareketli topa vuruş kuralları uygulandı.</p>' : ''}

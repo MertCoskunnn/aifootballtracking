@@ -142,6 +142,13 @@ const CONTEXT_OVERRIDES = {
   },
 };
 
+// cp-14a-olcum-yeterliligi: kapsam eşiği. Puanlanan kuralların ağırlık toplamı, puanlanabilir
+// kuralların ağırlık toplamının bu oranının altında kalırsa evaluate() puan üretmez (bkz. evaluate).
+// Neden: Ronaldo'nun arkadan çekilmiş bir şutunda 7 kuraldan sadece Ş7 ölçülebiliyordu, kalanı
+// görünürlük yüzünden "ölçülemedi"ydi; eski kod yine de tek maddenin ortalamasını alıp 100 veriyordu.
+// Sahada tek başına çalışan biri için bu "mükemmel" yanılgısı yaratıyordu.
+export const MIN_COVERAGE = 0.5;
+
 // Aralığın içindeyse 100, dışındaysa uzaklığa göre doğrusal düşüş
 function scoreOf(v, [lo, hi], tol) {
   if (v >= lo && v <= hi) return 100;
@@ -174,15 +181,43 @@ export function evaluate(m, mode, context) {
     return { ...r, value: v, shown: fmt(v, r.unit), score: s, tip };
   });
   const scored = items.filter((i) => i.score !== null);
-  if (!scored.length) throw new Error('Hiçbir ölçüm yapılamadı. Temas karesinde oyuncunun tüm vücudu görünüyor mu?');
-  const total = Math.round(
-    scored.reduce((a, i) => a + i.score * i.weight, 0) / scored.reduce((a, i) => a + i.weight, 0)
-  );
-  const worst = [...scored].sort((a, b) => a.score * a.weight - b.score * b.weight).filter((i) => i.tip);
+  // Kapsam: puanlanabilir kurallar = info olmayan VE (minFps varsa) fps şartını sağlayan kurallar.
+  // Ş5 gibi düşük fps yüzünden bilinçli dışlanan bir kural paydaya GİRMEZ — yoksa "13 kuraldan 1'i
+  // ölçüldü ama payda da zaten küçüktü" diye kapsam yapay olarak şişer.
+  const scorable = rules.filter((r) => !r.info && (!r.minFps || (m.fps ?? 30) >= r.minFps));
+  const scorableWeight = scorable.reduce((a, r) => a + r.weight, 0);
+  const scoredWeight = scored.reduce((a, i) => a + i.weight, 0);
+  const coverage = scorableWeight > 0 ? scoredWeight / scorableWeight : 0;
   // movingBall: rapor bu bayrak true ise "hareketli topa vuruş kuralları uygulandı" satırını
   // gösterir (app.js). Sadece kurallar GERÇEKTEN değiştiyse (applyContext) true olur; ör. pass/
   // freekick'te top hareketli olsa da CONTEXT_OVERRIDES tanımlı olmadığından burada false kalır.
-  return { total, items, focus: worst.slice(0, 2), verdict: verdict(total, mode), movingBall: applyContext };
+  if (coverage < MIN_COVERAGE) {
+    // Eskiden (scored.length === 0 durumunda) burada hata fırlatılırdı. Artık hiç ölçüm olmaması
+    // da "yetersiz kapsam"ın bir özel hali: kullanıcıya çökme yerine ne çekmesi gerektiğini söylüyoruz.
+    return {
+      total: null,
+      coverage,
+      insufficient: true,
+      items,
+      focus: [],
+      verdict: insufficientVerdict(mode, scorable.length - scored.length, scorable.length),
+      movingBall: applyContext,
+    };
+  }
+  const total = Math.round(scored.reduce((a, i) => a + i.score * i.weight, 0) / scoredWeight);
+  const worst = [...scored].sort((a, b) => a.score * a.weight - b.score * b.weight).filter((i) => i.tip);
+  return { total, coverage, insufficient: false, items, focus: worst.slice(0, 2), verdict: verdict(total, mode), movingBall: applyContext };
+}
+
+// Kapsam MIN_COVERAGE'ın altında kalınca (Ronaldo örneğindeki gibi tek madde ölçülüp geri kalanı
+// kamera açısından dolayı görünmüyorsa, ya da plase/frikikte hiçbir madde ölçülemiyorsa) çağrılır.
+// Hoca dilinde: kaç madde eksik olduğunu söyler, moda göre doğru çekim açısını önerir.
+function insufficientVerdict(mode, missing, scorableCount) {
+  const what = mode === 'shot' ? 'şut' : mode === 'freekick' ? 'frikik' : mode === 'placement' ? 'plase' : 'pas';
+  const tip = mode === 'freekick'
+    ? 'arkadan ya da çapraz arkadan, tüm vücut kadrajda çeksen'
+    : 'tam yandan, telefon sabit, tüm vücut ve top kadrajda çeksen';
+  return `Bu ${what} için ${missing}/${scorableCount} madde ölçülemedi, güvenilir bir puan veremem. Temas karesinde vücudunun büyük kısmı kadraj dışında ya da kapalı kalmış. ${tip}, hepsi ölçülebilir.`;
 }
 
 function verdict(t, mode) {
