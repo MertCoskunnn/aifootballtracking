@@ -3,7 +3,7 @@
   "olculdu": "2026-09-25",
   "video": "Lionel Messi Amazing Freekick Goal in Training _ HD.mp4 (720p, 25 fps, yandan sabit kamera)",
   "foot": "left",
-  "target": "sağ doksan",
+  "target": "sağ doksan, yakın köşe (Mert, 2026-09-25)",
   "vuruslar": [
     {
       "id": "MV1",
@@ -39,5 +39,7 @@
     "trunkLean": 0.9,
     "trunkSide": -3.6,
     "armOpen": 11.2
-  }
+  },
+  "teknik": "iç ayak, falsolu plase",
+  "sinir": "Hedef yönü ölçülmüyor: kalça/omuzun kaleye dönüşü postüre girmez. Aynı ayakla karşı köşe ya da uzak köşe ayrı teknik, ayrı referans ister. Aynalama sadece ayak değişiminde geçerli."
 }

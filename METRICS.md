@@ -137,6 +137,11 @@ Messi'nin destek diziyle kıyaslanır (test: aynalanmış iskelet birebir aynı 
   (POSTURE_TOL). Messi iki vuruşunda da 100 alıyor.
 - MV2'de eski elle işaretlenen temas (14.33) yanlıştı: o karede top hâlâ yerinde. Kare kare
   bakınca temas 14.40.
+- **Hedef (Mert):** Messi'nin vuruşu sağ doksan, **yakın köşe**. Aynı ayakla karşı köşe (sol doksan)
+  ya da uzak köşe ayrı tekniktir (koşu açısı, kalçanın hedefe dönüşü, temas yüzeyi farklı), ayrı
+  referans ister. Aynalama sadece ayak değişiminde geçerli, hedef değişiminde değil.
+- **Bilinen sınır:** 6 açı hedef yönünü içermiyor, uygulama sağ doksana nişan alındığını doğrulayamaz,
+  varsayar. v2 fikri: kullanıcı ilk karede kaleyi bir kez gösterir, kalça/omuz dönüşü hedefe göre ölçülür.
 - **Açık:** Bant ve toleranslar [T]. Mert'in 60 fps videoları (aynı vuruş yandan+arkadan) ile
   açıdan bağımsızlık ve gerçek ayrışma ölçülecek.
 
