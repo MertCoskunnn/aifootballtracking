@@ -163,3 +163,8 @@ kendisi değil, farklı oyuncular, çoğu arkadan/önden). Tek ayak seçilerek a
   vuruşun iyi olduğu, hangi ayakla hangi doksana gittiği Mert'ten öğrenilecek.
 - Algılanan ayak iki klipte görüntüyle uyuşmuyor gibi (arkadan çekimde sol/sağ karışması). v1'de ayak
   kullanıcı seçimi olduğu için puanı etkilemiyor.
+
+**İlk gerçek geri bildirim (Mert, 2026-09-25 gece):** sol ayakla **sol** doksana, Mert'e göre gerçekten
+iyi bir frikik, kamera açısı Messi videosundan çok farklı → **86**. İyi vuruş yüksek puan aldı ve açı
+farkı puanı bozmamış görünüyor; ama köşe ayırt edilmedi (hedef yönü ölçülmüyor, beklenen sınır).
+Test: aynı kurulumla sol ayak sağ doksan vs sol doksan. Benzer puan → v2'de hedefe göre dönüş ölçümü.
