@@ -1,45 +1,49 @@
-// Referans klip toplu analiz (cp-14-referans-toplu): regresyon.js'in kalıbını izler (aynı
+// Referans klip toplu analiz (cp-19-referans-liste): regresyon.js'in kalıbını izler (aynı
 // pipeline.js'i, blob URL ile video yükleme yöntemini kullanır) ama PASS/FAIL kontrolü DEĞİL,
-// ham ölçüm toplama aracıdır. 18 gece indirilen referans klipte (KAYNAKLAR.md) uygulamanın
-// GERÇEK akışını (pipeline.scanVideo: kısa video tek geçiş, uzun video kaba+yoğun) çalıştırır,
-// her bulunan vuruşu üç modda (shot/placement/freekick) ayrı ayrı analiz eder. Frodo bu ham
-// verilerle coach.js'teki eşikleri kalibre edecek (hedef kullanıcı: sahada tek başına idman
-// yapan oyuncu) — bu yüzden burada hiçbir "beklenen" değerle karşılaştırma yapılmaz.
+// ham ölçüm + ayrışma toplama aracıdır. Menü artık seçmeli (cp-15-secmeli-menu, otomatik mod
+// yok): her videonun (tür, ayak, açı) seçimi klasör yolundan gelir (scripts/referans-liste.mjs'in
+// ürettiği tests/referans-liste.json), pipeline'ın kendi suggestion.mode/kick.foot tahmini burada
+// KULLANILMAZ — regresyon.js'in cp-15 notuyla aynı gerekçe.
 import * as pipeline from '../pipeline.js?v=26';
+import { getRuleSet } from '../rules.js?v=26';
+import { encodeRelPathForFetch, toPipelineParams } from '../scripts/referans-liste.mjs';
+import { groupRows } from '../scripts/referans-ozet.mjs';
 
 const params = new URLSearchParams(location.search);
 const AUTO = params.get('auto') === '1';
-// Tek klip üstünde denemek/hata ayıklamak için: dosya adının bir parçasıyla filtrele.
-const ONLY = params.get('only') || null;
-// İlk N klip: uzun sürebilecek tam taramayı kısaltıp hızlı bir duman testi yapmak için.
-const MAX = params.get('max') ? parseInt(params.get('max'), 10) : null;
+// ?grup=frikik ya da ?grup=frikik/sag ya da ?grup=frikik/sag/arkadan: tur[/ayak[/aci]] filtresi.
+const GRUP = params.get('grup') ? params.get('grup').split('/').filter(Boolean) : null;
 
 // Klip başına zaman aşımı: bir klip takılırsa (ör. çok uzun replay içeren video) sayfa sonsuza
-// kadar beklemesin, o klibi "zaman aşımı" diye işaretleyip sıradakine geçsin.
-const CLIP_TIMEOUT_MS = 25 * 60 * 1000; // kalabalık yayın kliplerinde kare ~1.3 sn; 73 sn klip 8 dk'ya sığmadı
+// kadar beklemesin, o klibi "zaman aşımı" diye işaretleyip sıradakine geçsin (regresyon.js'teki
+// tests/referans.html cp-14 notuyla aynı gerekçe).
+const CLIP_TIMEOUT_MS = 25 * 60 * 1000;
 
 const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
-const statusEl = document.getElementById('status');
+const durumEl = document.getElementById('durum');
 const tbody = document.querySelector('#results tbody');
-const summaryEl = document.getElementById('summary');
+const ozetBolum = document.getElementById('ozetBolum');
+const ozetTbody = document.querySelector('#ozet-tablo tbody');
+const kuralTbody = document.querySelector('#kural-tablo tbody');
 const runBtn = document.getElementById('runBtn');
+const indirBtn = document.getElementById('indirBtn');
 
 // Frodo (ya da başka bir otomasyon) sonucu tarayıcıdan okuyabilsin diye: makine okunur çıktı.
-// Kasıtlı olarak iskelet kareleri (kick.frames) İÇİNDE DEĞİL — sadece sayılar/özetler, sonuç
-// çok büyük olmasın diye.
-window.__referans = { done: false, results: [], startedAt: null, finishedAt: null };
+// Kasıtlı olarak iskelet kareleri (kick.frames) İÇİNDE DEĞİL — sadece sayılar/özetler.
+window.__referansSonuc = { done: false, videos: [], gruplar: [], startedAt: null, finishedAt: null };
 
-function setStatus(t) { statusEl.textContent = t; }
+function setDurum(t) { durumEl.textContent = t; }
 
 function fmtNum(n, d = 2) { return typeof n === 'number' && Number.isFinite(n) ? n.toFixed(d) : '—'; }
 
 // Video sunucusu (python http.server) Range desteklemiyor: doğrudan URL'de ileri sarma çalışmıyor,
 // bu yüzden dosyayı önce blob olarak indirip URL.createObjectURL ile veriyoruz (regresyon.js'teki
-// GECE-PLANI notuyla aynı gerekçe).
-function fetchVideoBlob(filename) {
-  return fetch('../test-videolar/referans/' + encodeURIComponent(filename)).then((r) => {
+// GECE-PLANI notuyla aynı gerekçe). '/' ayraçlı yolları segment segment kodluyoruz (Türkçe/boşluklu/
+// özel karakterli dosya adları ve alt klasörler için) — scripts/referans-liste.mjs#encodeRelPathForFetch.
+function fetchVideoBlob(relFile) {
+  return fetch('../test-videolar/' + encodeRelPathForFetch(relFile)).then((r) => {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return r.blob();
   });
@@ -70,53 +74,41 @@ function drawFrame(frame) {
   }
 }
 
-// Bir vuruşu tek modda analiz eder, hata fırlatırsa (ör. temas karesinde iskelet yok, "Hiçbir
-// ölçüm yapılamadı" — coach.js#evaluate) o modu {error} olarak döner, diğer modları etkilemez.
-function tryAnalyze(kick, mode) {
+// Bir vuruşu klasörden gelen (mode, foot, angle) ile analiz eder. Önce rules.getRuleSet: bu
+// (tür, ayak, açı) hiç ölçülebiliyor mu (ör. frikik yandan çekilmişse hayır) — ölçülemezse
+// pipeline.analyzeKick hiç çağrılmaz, app.js runAnalysis ile aynı akış (cp-16-kural-matrisi).
+// Hata fırlatırsa (ör. temas karesinde iskelet yok) {hata} olarak döner, diğer vuruşları etkilemez.
+function analyzeOneKick(kick, mode, foot, angle, ruleSet) {
+  if (ruleSet.olculemez) {
+    return { t: kick.t, total: null, olculemez: true, mesaj: ruleSet.mesaj, referans: null, items: [], quality: kick.quality ?? null };
+  }
   try {
-    const a = pipeline.analyzeKick(kick, { mode, foot: 'auto' });
-    const m = a.measurements;
+    const a = pipeline.analyzeKick(kick, { mode, foot });
     return {
-      total: a.result.total,
-      items: a.result.items.map((i) => ({ ref: i.ref, value: Number.isFinite(i.value) ? i.value : null, score: i.score })),
-      phasesTimes: m.phases ? m.phases.times : null,
-      supportKneeAtPlant: Number.isFinite(m.supportKneeAtPlant) ? m.supportKneeAtPlant : null,
-      // sadece placement (measure()) çıktısında var; freekick'te (measureFreeKick()) yok → null.
-      kneeAngVelRatio: Number.isFinite(m.kneeAngVelRatio) ? m.kneeAngVelRatio : null,
+      t: kick.t,
+      total: a.result.total, // insufficient ise coach.js zaten null döner ("ölçüm yetersiz")
+      insufficient: !!a.result.insufficient,
+      olculemez: false,
+      referans: ruleSet.referans,
+      items: a.result.items.map((i) => ({ key: i.ref, value: Number.isFinite(i.value) ? i.value : null, score: i.score })),
+      quality: kick.quality ?? null,
     };
   } catch (err) {
-    return { error: err.message };
+    return { t: kick.t, total: null, hata: err.message, olculemez: false, referans: ruleSet.referans, items: [], quality: kick.quality ?? null };
   }
 }
 
-// collectKicks'in ürettiği bir vuruşu (kick.frames dahil, ağır) sonuç için hafif bir özete
-// çevirir: kick.frames'i (iskelet kareleri) SONUCA KOYMAZ, sadece t/foot/view/context/analiz sayıları.
-function summarizeKick(kick) {
-  return {
-    t: kick.t,
-    foot: kick.foot,
-    view: kick.view ? { view: kick.view.view, confidence: kick.view.confidence, reason: kick.view.reason } : null,
-    suggestionMode: kick.suggestion ? kick.suggestion.mode : null,
-    context: { movingBall: !!(kick.context && kick.context.movingBall), ballSpeed: kick.context ? kick.context.ballSpeed : null },
-    fps: kick.fps,
-    analizler: {
-      shot: tryAnalyze(kick, 'shot'),
-      placement: tryAnalyze(kick, 'placement'),
-      freekick: tryAnalyze(kick, 'freekick'),
-    },
-  };
-}
-
 async function processClip(entry) {
-  const filename = entry.file;
-  const base = { file: filename, kategori: entry.kategori, oyuncu: entry.oyuncu, beklenenTur: entry.beklenenTur, kaynakNot: entry.not };
+  const { mode, foot, angle } = toPipelineParams(entry);
+  const base = { file: entry.file, tur: entry.tur, ayak: entry.ayak, aci: entry.aci, etiket: entry.etiket };
+  const ruleSet = getRuleSet(mode, foot, angle);
 
   let blob;
-  try { blob = await fetchVideoBlob(filename); }
-  catch (err) { return { ...base, durum: 'hata', hata: 'video indirilemedi: ' + err.message, kicks: [] }; }
+  try { blob = await fetchVideoBlob(entry.file); }
+  catch (err) { return { ...base, durum: 'hata', hata: 'video indirilemedi: ' + err.message, vurushlar: [] }; }
 
   try { await loadIntoVideo(blob); }
-  catch (err) { return { ...base, durum: 'hata', hata: 'video açılamadı: ' + err.message, kicks: [] }; }
+  catch (err) { return { ...base, durum: 'hata', hata: 'video açılamadı: ' + err.message, vurushlar: [] }; }
 
   const visionBefore = pipeline.getVisionStats();
   const started = performance.now();
@@ -130,16 +122,17 @@ async function processClip(entry) {
     const durationSec = await pipeline.realDuration(video);
     const res = await pipeline.scanVideo(video, {
       onFrame: drawFrame,
-      onProgress: (label, i, total) => setStatus(`${filename}: ${label} %${Math.round(((i + 1) / total) * 100)}`),
+      onProgress: (label, i, total) => setDurum(`${entry.file}: ${label} %${Math.round(((i + 1) / total) * 100)}`),
       shouldStop,
     });
     const kicks = res.kicks || [];
     const processingSec = (performance.now() - started) / 1000;
     const visionAfter = pipeline.getVisionStats();
-    // kick başına özetleme de tek tek try/catch'te: bir vuruşun özeti çökerse diğerleri kaybolmasın.
-    const kickSummaries = kicks.map((k, idx) => {
-      try { return summarizeKick(k); }
-      catch (err) { return { t: k.t, hata: `vuruş ${idx} özetlenemedi: ${err.message}` }; }
+    // TÜM vuruşlar (spec: "her video için tüm vuruşları bulur"), tek tek try/catch (analyzeOneKick
+    // zaten hata döner çökmez, ama vuruş listesindeki başka bir hata kalanları etkilemesin diye yine sarılı).
+    const vurushlar = kicks.map((k, idx) => {
+      try { return analyzeOneKick(k, mode, foot, angle, ruleSet); }
+      catch (err) { return { t: k.t, total: null, hata: `vuruş ${idx} analiz edilemedi: ${err.message}` }; }
     });
     return {
       ...base,
@@ -147,84 +140,127 @@ async function processClip(entry) {
       hata: null,
       durationSec,
       processingSec,
-      kickCount: kicks.length,
-      kicks: kickSummaries,
+      vurusSayisi: vurushlar.length,
+      vurushlar,
       moveNetCalls: visionAfter.moveNetCalls - visionBefore.moveNetCalls,
       moveNetAccepted: visionAfter.moveNetAccepted - visionBefore.moveNetAccepted,
-      sonucNot: kicks.length ? (zamanAsimi ? 'zaman aşımı (25 dk) — o ana kadar bulunan vuruşlarla kısmi sonuç' : null)
+      sonucNot: vurushlar.length ? (zamanAsimi ? 'zaman aşımı (25 dk) — o ana kadar bulunan vuruşlarla kısmi sonuç' : null)
         : (zamanAsimi ? 'zaman aşımı (25 dk), vuruş bulunamadı' : 'vuruş bulunamadı'),
     };
   } catch (err) {
-    return { ...base, durum: 'hata', hata: 'Hata: ' + err.message, kicks: [] };
+    return { ...base, durum: 'hata', hata: 'Hata: ' + err.message, vurushlar: [] };
   }
+}
+
+function grupUyuyorMu(entry) {
+  if (!GRUP) return true;
+  const kolonlar = [entry.tur, entry.ayak, entry.aci];
+  return GRUP.every((seg, i) => kolonlar[i] === seg);
+}
+
+function puanHucresi(vurushlar) {
+  if (!vurushlar || !vurushlar.length) return '—';
+  return vurushlar.map((v) => {
+    if (v.hata) return `${fmtNum(v.t)}s: hata`;
+    if (v.olculemez) return `${fmtNum(v.t)}s: ölçülemez`;
+    return `${fmtNum(v.t)}s: ${v.total === null ? (v.insufficient ? 'yetersiz' : '—') : v.total}${v.referans ? ` (${v.referans})` : ''}`;
+  }).join(' · ');
 }
 
 function renderRow(row) {
   const tr = document.createElement('tr');
   if (row.durum === 'hata') {
     tr.className = 'hata';
-    tr.innerHTML = `<td>${row.file}</td><td>${row.kategori || ''}</td><td colspan="6" class="skip">hata: ${row.hata}</td><td>HATA</td>`;
+    tr.innerHTML = `<td>${row.file}</td><td>${row.tur}/${row.ayak}/${row.aci}</td><td>${row.etiket}</td>
+      <td colspan="3" class="skip">hata: ${row.hata}</td><td>HATA</td>`;
     tbody.appendChild(tr);
     return;
   }
-  const ilk = row.kicks && row.kicks[0];
-  const ilkHucre = ilk
-    ? `${fmtNum(ilk.t)}s / ${ilk.foot ?? '—'} / ${ilk.view ? ilk.view.view : '—'} / ${ilk.context && ilk.context.movingBall ? 'evet' : 'hayır'}`
-    : (row.sonucNot || '—');
-  const puan = (mode) => {
-    const a = ilk && ilk.analizler ? ilk.analizler[mode] : null;
-    if (!a) return '—';
-    return a.error ? `hata` : String(a.total);
-  };
   tr.className = row.durum === 'zaman-asimi' ? 'hata' : 'ok';
   tr.innerHTML = `
     <td>${row.file}</td>
-    <td>${row.kategori || ''}</td>
-    <td>${row.kickCount}</td>
-    <td>${ilkHucre}</td>
-    <td>${puan('shot')}</td>
-    <td>${puan('placement')}</td>
-    <td>${puan('freekick')}</td>
+    <td>${row.tur}/${row.ayak}/${row.aci}</td>
+    <td>${row.etiket}</td>
+    <td>${row.vurusSayisi}</td>
+    <td>${row.vurusSayisi ? puanHucresi(row.vurushlar) : (row.sonucNot || '—')}</td>
     <td>${fmtNum(row.durationSec, 1)} / ${fmtNum(row.processingSec, 1)}</td>
     <td>${row.durum === 'zaman-asimi' ? 'ZAMAN AŞIMI' : 'OK'}</td>`;
   tbody.appendChild(tr);
 }
 
-function summarize(results) {
-  const ok = results.filter((r) => r.durum === 'ok').length;
-  const hata = results.filter((r) => r.durum === 'hata').length;
-  const zamanAsimi = results.filter((r) => r.durum === 'zaman-asimi').length;
-  const toplamVurus = results.reduce((s, r) => s + (r.kickCount || 0), 0);
-  return `Toplam: ${results.length} klip · OK: ${ok} · Hata: ${hata} · Zaman aşımı: ${zamanAsimi} · Toplam bulunan vuruş: ${toplamVurus}`;
+function renderOzet(gruplar) {
+  ozetTbody.innerHTML = '';
+  kuralTbody.innerHTML = '';
+  for (const g of gruplar) {
+    const etiket = `${g.tur}/${g.ayak}/${g.aci}`;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${etiket}</td>
+      <td>${g.vurusSayisi}</td>
+      <td>${fmtNum(g.iyiOrtPuan, 1)}</td>
+      <td>${fmtNum(g.kotuOrtPuan, 1)}</td>
+      <td>${g.ayrisma === null ? '<span class="ayrisma-yok">iyi/kötü örneği eksik</span>' : fmtNum(g.ayrisma, 1)}</td>
+      <td>${g.olculemezSayisi}</td>`;
+    ozetTbody.appendChild(tr);
+
+    for (const [key, s] of Object.entries(g.kurallar)) {
+      const ktr = document.createElement('tr');
+      ktr.innerHTML = `<td>${etiket}</td><td>${key}</td><td>${fmtNum(s.medyan)}</td><td>${fmtNum(s.min)}</td><td>${fmtNum(s.max)}</td><td>${s.n}</td>`;
+      kuralTbody.appendChild(ktr);
+    }
+  }
+  ozetBolum.hidden = gruplar.length === 0;
+}
+
+function indirJSON() {
+  const blob = new Blob([JSON.stringify(window.__referansSonuc, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `referans-sonuc-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 async function run() {
   runBtn.disabled = true;
   tbody.innerHTML = '';
+  ozetBolum.hidden = true;
   const startedAt = new Date().toISOString();
-  window.__referans = { done: false, results: [], startedAt, finishedAt: null };
-  setStatus('referans-liste.json okunuyor…');
+  window.__referansSonuc = { done: false, videos: [], gruplar: [], startedAt, finishedAt: null };
+  setDurum('referans-liste.json okunuyor…');
   const data = await fetch('./referans-liste.json').then((r) => r.json());
 
-  let list = data.klipler;
-  if (ONLY) list = list.filter((e) => e.file.toLowerCase().includes(ONLY.toLowerCase()));
-  if (MAX && Number.isFinite(MAX) && MAX > 0) list = list.slice(0, MAX);
+  const list = data.klipler.filter(grupUyuyorMu);
+  setDurum(`0/${list.length} video, ~kalan hesaplanıyor…`);
 
-  const results = [];
-  for (const entry of list) {
-    setStatus(`${entry.file} işleniyor…`);
+  const videos = [];
+  const t0 = performance.now();
+  for (let i = 0; i < list.length; i++) {
+    const entry = list[i];
+    setDurum(`${i}/${list.length} video, ${entry.file} işleniyor…`);
     const row = await processClip(entry);
-    results.push(row);
+    videos.push(row);
     renderRow(row);
-    window.__referans.results = results; // her klip bitince kısmi ilerleme de okunabilsin
+    const ortalamaSure = (performance.now() - t0) / (i + 1);
+    const kalanDk = ((list.length - i - 1) * ortalamaSure) / 60000;
+    setDurum(`${i + 1}/${list.length} video, ~${fmtNum(kalanDk, 1)} dk kalan`);
+    window.__referansSonuc.videos = videos; // her klip bitince kısmi ilerleme de okunabilsin
   }
 
+  // Grup özeti: her videonun her vuruşunu tek satırlık akışa (tur/ayak/aci/etiket/total/items) düzleştirip
+  // groupRows'a veriyoruz (scripts/referans-ozet.mjs — saf, Node testli).
+  const satirlar = videos.flatMap((v) => (v.vurushlar || []).map((k) => ({
+    tur: v.tur, ayak: v.ayak, aci: v.aci, etiket: v.etiket, total: k.total, items: k.items || [],
+  })));
+  const gruplar = groupRows(satirlar);
+  renderOzet(gruplar);
+
   const finishedAt = new Date().toISOString();
-  window.__referans = { done: true, results, startedAt, finishedAt };
-  summaryEl.textContent = summarize(results);
-  setStatus('Bitti.');
+  window.__referansSonuc = { done: true, videos, gruplar, startedAt, finishedAt };
+  setDurum(`Bitti. ${list.length} video, ${satirlar.length} vuruş.`);
   runBtn.disabled = false;
 }
 
-runBtn.addEventListener('click', () => run().catch((err) => setStatus('Hata: ' + err.message)));
-if (AUTO) run().catch((err) => setStatus('Hata: ' + err.message));
+runBtn.addEventListener('click', () => run().catch((err) => setDurum('Hata: ' + err.message)));
+indirBtn.addEventListener('click', indirJSON);
+if (AUTO) run().catch((err) => setDurum('Hata: ' + err.message));

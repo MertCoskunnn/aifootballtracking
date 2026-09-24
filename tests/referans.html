@@ -4,9 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Referans klip toplu analiz — Futbol AI Hoca</title>
-  <!-- cp-14-referans-toplu: regresyon.html ile aynı kalıp (style.css'e dokunmuyoruz, sadece
-       tablo için birkaç ek kural burada). Bu sayfa PASS/FAIL değil, ham ölçüm toplama aracı:
-       Frodo bu ölçümlerle eşikleri kalibre edecek. -->
+  <!-- cp-19-referans-liste: referans.html/js yeniden yazıldı. Artık "otomatik mod" tahmini yok
+       (cp-15-secmeli-menu ürün kararı): her videonun (tür, ayak, açı) seçimi klasör yolundan
+       geliyor (test-videolar/<tur>/<ayak>/<aci>/<etiket>_<ad>.mp4, bkz. scripts/referans-liste.mjs).
+       Bu sayfa hâlâ PASS/FAIL değil, ham ölçüm + ayrışma toplama aracı. -->
   <link rel="stylesheet" href="../style.css?v=26">
   <style>
     table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: .82rem; }
@@ -19,41 +20,66 @@
     .stage { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
     .stage video { width: 240px; background: #000; border-radius: 8px; }
     .stage canvas { width: 240px; background: #000; border-radius: 8px; }
-    #summary { font-weight: 700; margin-top: 10px; }
+    #durum { font-weight: 600; }
+    #ozet-tablo td, #ozet-tablo th { font-size: .78rem; }
+    #kural-tablo td, #kural-tablo th { font-size: .76rem; }
+    .ayrisma-yok { color: var(--muted); font-style: italic; }
   </style>
 </head>
 <body>
   <header>
     <h1>Referans klip toplu analiz</h1>
-    <p class="sub">18 referans klipte uygulamanın kendi hattını çalıştırıp ham ölçümleri toplar (cp-14, Frodo'nun eşik kalibrasyon aracı).</p>
+    <p class="sub">test-videolar/&lt;tur&gt;/&lt;ayak&gt;/&lt;aci&gt;/&lt;etiket&gt;_&lt;ad&gt;.mp4 yapısını tarar, her klipteki
+      TÜM vuruşları klasörden gelen (tür, ayak, açı) ile analiz eder, grup bazlı ayrışma ve kural kalibrasyon
+      verisi üretir (cp-19-referans-liste, Frodo'nun eşik kalibrasyon aracı).</p>
   </header>
   <main>
     <section class="panel">
       <p class="hint">
-        Otomatik başlatmak için <code>?auto=1</code>. Tek klip için <code>?only=&lt;dosya-adı-parçası&gt;</code>,
-        ilk N klip için <code>?max=N</code>.
+        Otomatik başlatmak için <code>?auto=1</code>. Belirli bir gruba filtrelemek için
+        <code>?grup=frikik</code>, <code>?grup=frikik/sag</code> ya da <code>?grup=frikik/sag/arkadan</code>
+        (tur, tur/ayak ya da tur/ayak/aci — soldan sağa, verdiğin kadarını eşler).
       </p>
       <button id="runBtn" class="primary">Taramayı başlat</button>
       <div class="stage">
         <video id="video" muted playsinline></video>
         <canvas id="canvas" width="240" height="135"></canvas>
       </div>
-      <p class="status" id="status"></p>
+      <p class="status" id="durum"></p>
     </section>
 
     <section class="panel">
       <table id="results">
         <thead>
           <tr>
-            <th>Video</th><th>Kategori</th><th>Vuruş sayısı</th>
-            <th>İlk vuruş: t / ayak / açı / hareketli top</th>
-            <th>Shot</th><th>Placement</th><th>Freekick</th>
+            <th>Video</th><th>Tür/Ayak/Açı</th><th>Etiket</th><th>Vuruş sayısı</th>
+            <th>Vuruşlar (t → puan / referans)</th>
             <th>Video / işleme süresi (sn)</th><th>Sonuç</th>
           </tr>
         </thead>
         <tbody></tbody>
       </table>
-      <p id="summary"></p>
+    </section>
+
+    <section class="panel" id="ozetBolum" hidden>
+      <h2>Grup özeti</h2>
+      <table id="ozet-tablo">
+        <thead>
+          <tr>
+            <th>Tür/Ayak/Açı</th><th>Vuruş sayısı</th><th>İyi ort. puan</th><th>Kötü ort. puan</th>
+            <th>Ayrışma (iyi−kötü)</th><th>Ölçülemez sayısı</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <h2>Kural kalibrasyonu (medyan / min / max)</h2>
+      <table id="kural-tablo">
+        <thead>
+          <tr><th>Tür/Ayak/Açı</th><th>Kural</th><th>Medyan</th><th>Min</th><th>Max</th><th>N</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <p><button id="indirBtn">JSON indir</button></p>
     </section>
   </main>
   <script type="module" src="referans.js?v=26"></script>
