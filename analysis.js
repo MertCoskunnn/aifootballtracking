@@ -7,15 +7,19 @@ import { findKicks, classifyView, suggestMode } from './detect.js?v=25';
 import { detectMovingBall } from './context.js?v=25';
 import { buildTrack, measure, measureFreeKick } from './metrics.js?v=25';
 import { evaluate } from './coach.js?v=25';
+import { assessKickQuality } from './quality.js?v=25';
 
 /**
  * Yoğun (dense) karelerden vuruş listesi çıkarır: findKicks + her vuruş için kamera açısı
  * (classifyView), mod önerisi (suggestMode) ve top bağlamı (detectMovingBall — cp-13-vurus-turleri,
  * duran mı hareketli top mu). Her vuruş kendi 'frames' penceresini taşır ki listeden tıklanınca
  * (ya da regresyon sayfasında) o pencere tekrar oynatılabilsin/ölçülebilsin.
- * denseFrames: processRange çıktısı [{ t, people, balls }, ...] (bir pencerenin tüm kareleri)
+ * denseFrames: processRange çıktısı [{ t, people, balls, gray }, ...] (bir pencerenin tüm kareleri;
+ * gray varsa — vision.js, cp-15-kalite-kapisi — kalite kapıları da değerlendirilir, yoksa
+ * quality.ok:true/deger:null "ölçülemedi" ile geçer, tarama çökmez).
  * fps: bu karelerin işlendiği hız (genelde DENSE_FPS=30)
- * Dönen: [{ contact, foot, person, rest, onset, flight, frames, fps, t, view, suggestion, context, score }]
+ * Dönen: [{ contact, foot, person, rest, onset, flight, frames, fps, t, view, suggestion, context,
+ *   quality: { kamera:{ok,kayma}, netlik:{ok,deger} }, score }]
  */
 export function collectKicks(denseFrames, fps) {
   const kicks = findKicks(denseFrames, fps);
@@ -23,7 +27,10 @@ export function collectKicks(denseFrames, fps) {
     const view = classifyView(denseFrames, k, fps);
     const suggestion = suggestMode(view.view);
     const context = detectMovingBall(denseFrames, k, fps);
-    return { ...k, frames: denseFrames, fps, t: denseFrames[k.contact].t, view, suggestion, context, score: null };
+    // cp-15-kalite-kapisi: sabit kamera + net görüntü ürün kararı (PRODUCT-PLAN.md). Burada sadece
+    // ölçüm dolduruluyor; kapının kendisini (uyarı/engelleme) UI'a bağlamak proje yöneticisinde.
+    const quality = assessKickQuality(denseFrames, k, fps);
+    return { ...k, frames: denseFrames, fps, t: denseFrames[k.contact].t, view, suggestion, context, quality, score: null };
   });
 }
 
