@@ -3,24 +3,27 @@
 // edilebilsin. vision.js CDN'den import yaptığı için Node bunu import edemez; bu yüzden
 // collectKicks/analyzeKick gibi "sadece veriyle çalışan" fonksiyonlar pipeline.js'ten
 // ayrıldı. pipeline.js bunları buradan alıp app.js'e (ve regresyon sayfasına) yeniden sunar.
-import { findKicks, classifyView, suggestMode } from './detect.js';
-import { buildTrack, measure, measureFreeKick } from './metrics.js';
-import { evaluate } from './coach.js';
+import { findKicks, classifyView, suggestMode } from './detect.js?v=19';
+import { detectMovingBall } from './context.js?v=19';
+import { buildTrack, measure, measureFreeKick } from './metrics.js?v=19';
+import { evaluate } from './coach.js?v=19';
 
 /**
  * Yoğun (dense) karelerden vuruş listesi çıkarır: findKicks + her vuruş için kamera açısı
- * (classifyView) ve mod önerisi (suggestMode). Her vuruş kendi 'frames' penceresini taşır
- * ki listeden tıklanınca (ya da regresyon sayfasında) o pencere tekrar oynatılabilsin/ölçülebilsin.
+ * (classifyView), mod önerisi (suggestMode) ve top bağlamı (detectMovingBall — cp-13-vurus-turleri,
+ * duran mı hareketli top mu). Her vuruş kendi 'frames' penceresini taşır ki listeden tıklanınca
+ * (ya da regresyon sayfasında) o pencere tekrar oynatılabilsin/ölçülebilsin.
  * denseFrames: processRange çıktısı [{ t, people, balls }, ...] (bir pencerenin tüm kareleri)
  * fps: bu karelerin işlendiği hız (genelde DENSE_FPS=30)
- * Dönen: [{ contact, foot, person, rest, onset, flight, frames, fps, t, view, suggestion, score }]
+ * Dönen: [{ contact, foot, person, rest, onset, flight, frames, fps, t, view, suggestion, context, score }]
  */
 export function collectKicks(denseFrames, fps) {
   const kicks = findKicks(denseFrames, fps);
   return kicks.map((k) => {
     const view = classifyView(denseFrames, k, fps);
     const suggestion = suggestMode(view.view);
-    return { ...k, frames: denseFrames, fps, t: denseFrames[k.contact].t, view, suggestion, score: null };
+    const context = detectMovingBall(denseFrames, k, fps);
+    return { ...k, frames: denseFrames, fps, t: denseFrames[k.contact].t, view, suggestion, context, score: null };
   });
 }
 
@@ -40,7 +43,9 @@ export function analyzeKick(kick, { mode = 'auto', foot = 'auto' } = {}) {
   const measurements = effMode === 'freekick'
     ? measureFreeKick(track, kick.contact, ball, effFoot, kick.fps || 30)
     : measure(track, kick.contact, ball, effFoot, kick.fps);
-  const result = evaluate(measurements, effMode);
+  // kick.context: detectMovingBall'dan (collectKicks). Hareketli topsa (RESEARCH-VURUS-TURLERI.md
+  // §2, H1/H3) shot/placement'ta ilgili kurallar genişler; pass/freekick/duran topta değişmez.
+  const result = evaluate(measurements, effMode, kick.context);
   return { mode: effMode, foot: effFoot, track, measurements, result };
 }
 

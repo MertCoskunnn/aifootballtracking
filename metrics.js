@@ -1,7 +1,7 @@
 // Ölçüm katmanı ("cetvel"): iskelet noktalarından açı ve mesafe hesaplar.
 // Saf fonksiyonlar, tarayıcıya ve MediaPipe'a bağımlı değil, test edilebilir.
 // Koordinatlar piksel cinsinden, y aşağı doğru artar.
-import { findPhases } from './phases.js';
+import { findPhases } from './phases.js?v=19';
 
 // MediaPipe Pose nokta numaraları
 export const LM = {
@@ -174,6 +174,37 @@ export function measure(frames, contact, ball, side, fps = 30) {
   const kneeVis = [LM.hip[side], LM.knee[side], LM.ankle[side]];
   const kickKnee = visOk(p, kneeVis) ? kneeFlexion(p, side) : NaN;
 
+  // cp-13-vurus-turleri, PL4 (bilgi, coach.js placement'ta info:true — puana girmez, kalibrasyon
+  // bekliyor): vuran dizin açısal hızının (derece/sn) kalça-orta noktasının yatay hızına (bacak
+  // boyu/sn) oranı. RESEARCH-VURUS-TURLERI.md "Frodo için özet" madde 1: Alcock 2012'de plase/curl
+  // ile şutu (instep) ayıran en net kinematik imza bu — şutta yaklaşma/kalça DOĞRUSAL hızı, plasede
+  // dizin AÇISAL hızı baskın. Açısal hız: temastan önceki 0.3 sn'deki ardışık karelerde diz
+  // büküşünün mutlak değişiminin en büyüğü (derece/sn'e çevrilmiş). Kalça hızı: aynı pencerede
+  // kalça-orta noktasının yatay kayma hızının ortalaması. Her iki uçta da veri eksikse (görünmüyor,
+  // ya da kalça hızı ~0) oran NaN döner ("ölçülemedi").
+  const kavFrom = Math.max(0, contact - Math.round(0.3 * fps));
+  let kneeAngVel = -Infinity;
+  let hipSpeedSum = 0, hipSpeedN = 0;
+  for (let i = kavFrom + 1; i <= contact; i++) {
+    const f0 = frames[i - 1], f1 = frames[i];
+    if (!f0 || !f1) continue;
+    if (visOk(f0, kneeVis) && visOk(f1, kneeVis)) {
+      const delta = Math.abs(kneeFlexion(f1, side) - kneeFlexion(f0, side)) * fps;
+      if (delta > kneeAngVel) kneeAngVel = delta;
+    }
+    if (visOk(f0, [LM.hip.left, LM.hip.right]) && visOk(f1, [LM.hip.left, LM.hip.right])) {
+      const h0 = mid(f0[LM.hip.left], f0[LM.hip.right]);
+      const h1 = mid(f1[LM.hip.left], f1[LM.hip.right]);
+      hipSpeedSum += (Math.abs(h1.x - h0.x) / leg) * fps;
+      hipSpeedN++;
+    }
+  }
+  const kneeAngVelFinal = kneeAngVel > -Infinity ? kneeAngVel : NaN;
+  const hipSpeedAvg = hipSpeedN ? hipSpeedSum / hipSpeedN : NaN;
+  const kneeAngVelRatio = Number.isFinite(kneeAngVelFinal) && Number.isFinite(hipSpeedAvg) && hipSpeedAvg > 1e-6
+    ? kneeAngVelFinal / hipSpeedAvg
+    : NaN;
+
   // cp-11-evreler: basış/kurma/takip anlarını gerçek harekete bakarak bulur (phases.js, saf).
   // Bu evreler PUANA GİRMEZ (coach.js'e dokunulmadı) — bilgi amaçlı, raporda "kurman kısaydı" gibi
   // somut geri bildirim vermek için.
@@ -205,6 +236,7 @@ export function measure(frames, contact, ball, side, fps = 30) {
     armOpen,
     followRise,
     followHip,
+    kneeAngVelRatio, // PL4 (bilgi): coach.js'te placement'ta info:true, puana girmez
     fps, // coach.js bazı ölçümleri düşük fps'de puana katmaz (Ş5)
     phases: { ...phases, times },
     supportKneeAtPlant,

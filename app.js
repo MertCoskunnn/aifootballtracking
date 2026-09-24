@@ -7,9 +7,9 @@
 // tarayıcıda çalışan regresyon kontrol sayfası (tests/regresyon.html) AYNI kodu çalıştırmalı,
 // yoksa "Messi hâlâ 100 mü" kontrolü sadece burada doğru, orada yanlış olabilir. Bu dosyada artık
 // sadece arayüz ve akış var; tarama adımlarının kendisi pipeline.js'te.
-import * as pipeline from './pipeline.js?v=15';
-import { measure, measureFreeKick, buildTrack } from './metrics.js?v=15';
-import { evaluate } from './coach.js?v=15';
+import * as pipeline from './pipeline.js?v=19';
+import { measure, measureFreeKick, buildTrack } from './metrics.js?v=19';
+import { evaluate } from './coach.js?v=19';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');
@@ -306,7 +306,7 @@ const VIEW_LABEL = { side: 'Yandan', behind: 'Arkadan', front: 'Önden', unknown
 function viewWarning(mode) {
   const view = state.activeKick?.view?.view;
   if (!view || view === 'unknown') return null;
-  const compatible = (mode === 'freekick' && view === 'behind') || ((mode === 'shot' || mode === 'pass') && view === 'side');
+  const compatible = (mode === 'freekick' && view === 'behind') || ((mode === 'shot' || mode === 'pass' || mode === 'placement') && view === 'side');
   if (compatible) return null;
   return `Bu açıdan (${VIEW_LABEL[view]}) ${MODE_TITLE[mode]} ölçümleri güvenilir değil.`;
 }
@@ -345,6 +345,7 @@ $('next').addEventListener('click', () => state.index < state.frames.length - 1 
 const SETUP_HINTS = {
   auto: 'Videoyu yükle, hoca vuruşu ve kamera açısını kendisi bulsun. Yandan çekimde şut/pas, arkadan çekimde frikik ölçülür.',
   shot: 'Çekim: tam yandan, telefon sabit, tüm vücut ve top kadrajda.',
+  placement: 'Çekim: tam yandan, telefon sabit, tüm vücut ve top kadrajda. Plase otomatik önerilmez, bu modu kendin seç.',
   pass: 'Çekim: tam yandan, telefon sabit, tüm vücut ve top kadrajda.',
   freekick: 'Çekim: arkadan ya da çapraz arkadan, telefon sabit, oyuncu ve top kadrajda.',
 };
@@ -396,7 +397,7 @@ $('analyze').addEventListener('click', runAnalysis);
 // --- vuruş listesi ---
 
 const FOOT_LABEL = { right: 'Sağ', left: 'Sol' };
-const MODE_TITLE = { shot: 'Şut', pass: 'Pas', freekick: 'Frikik' };
+const MODE_TITLE = { shot: 'Şut', pass: 'Pas', freekick: 'Frikik', placement: 'Plase' };
 
 function fmtTime(t) {
   const m = Math.floor(t / 60);
@@ -462,8 +463,9 @@ function renderReport(res, mode, warning) {
   el.innerHTML = `
     <h2>${MODE_TITLE[mode] ?? 'Pas'} raporu</h2>
     <div class="score"><span class="big">${res.total}</span><span>/ 100</span></div>
-    <div class="coach">${res.verdict}${res.focus.length ? '<br><br><b>Odaklan:</b> ' + res.focus.map((f) => f.tip).join(' ') : ''}</div>
+    <div class="coach">${res.verdict}${res.focus.length ? '<br><br><b>Odaklan:</b><br>' + res.focus.map((f) => `${f.tip}${f.drill ? `<br><span class="hint">Alıştırma: ${f.drill}</span>` : ''}`).join('<br><br>') : ''}</div>
     ${warning ? `<p class="warn">${warning}</p>` : ''}
+    ${res.movingBall ? '<p class="hint">Top hareketliydi: hareketli topa vuruş kuralları uygulandı.</p>' : ''}
     ${lowVis ? '<p class="warn">Temas karesinde bacak noktalarının bazıları net görünmüyor. Sonuç yanıltıcı olabilir.</p>' : ''}
     ${res.items.map((i) => `
       <div class="metric">

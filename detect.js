@@ -292,6 +292,12 @@ function describeFlight(fl) {
 /**
  * Açıya göre mod önerisi. Yandan çekimde şut/pas kuralları (ön-arka düzlem) ölçülebilir,
  * arkadan çekimde frikik kuralları (yanal düzlem) ölçülebilir. Önden çekim henüz desteklenmiyor.
+ *
+ * cp-13-vurus-turleri: plase de yandan çekiliyor (aynı 'side' görünümü), ama şuttan otomatik
+ * ayrılmıyor kasıtlı olarak — RESEARCH-VURUS-TURLERI.md §4'e göre şut/plase ayrımı tek bir
+ * güvenilir eşiğe dayanmıyor (Alcock 2012: temas anındaki ayak hızı ikisinde de aynı çıkabiliyor,
+ * basit bir hız eşiği yanıltıcı olur). Bu yüzden yandan çekimde öneri hep 'shot' kalır, plase
+ * modunu kullanıcı kendi seçer (index.html'deki mod listesi).
  */
 export function suggestMode(view) {
   if (view === 'side') return { mode: 'shot', note: 'Yandan çekim: şut ya da pas analizi yapılabilir.' };
