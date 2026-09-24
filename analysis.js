@@ -3,11 +3,11 @@
 // edilebilsin. vision.js CDN'den import yaptığı için Node bunu import edemez; bu yüzden
 // collectKicks/analyzeKick gibi "sadece veriyle çalışan" fonksiyonlar pipeline.js'ten
 // ayrıldı. pipeline.js bunları buradan alıp app.js'e (ve regresyon sayfasına) yeniden sunar.
-import { findKicks, classifyView, suggestMode } from './detect.js?v=35';
-import { detectMovingBall } from './context.js?v=35';
-import { buildTrack, measure, measureFreeKick } from './metrics.js?v=35';
-import { evaluate } from './coach.js?v=35';
-import { assessKickQuality } from './quality.js?v=35';
+import { findKicks, classifyView, suggestMode } from './detect.js?v=36';
+import { detectMovingBall } from './context.js?v=36';
+import { buildTrack, measure, measureFreeKick } from './metrics.js?v=36';
+import { evaluate } from './coach.js?v=36';
+import { assessKickQuality } from './quality.js?v=36';
 
 /**
  * Yoğun (dense) karelerden vuruş listesi çıkarır: findKicks + her vuruş için kamera açısı

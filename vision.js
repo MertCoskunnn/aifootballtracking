@@ -16,8 +16,8 @@ import { PoseLandmarker, ObjectDetector, FilesetResolver } from './vendor/mediap
 // kutusunda BlazePose başarısız olunca devreye girer (aşağıdaki personBoxes döngüsü). Ağır
 // (TF.js/model) iş movenet.js'te, saf 17→33 nokta dönüşümü keypoints.js'te (Node testli) —
 // bu dosya sadece ikisini birbirine bağlar.
-import * as movenet from './movenet.js?v=35';
-import { mapCocoToMediapipe, acceptMoveNetPose } from './keypoints.js?v=35';
+import * as movenet from './movenet.js?v=36';
+import { mapCocoToMediapipe, acceptMoveNetPose } from './keypoints.js?v=36';
 // cp-15-kalite-kapisi: "sabit kameralı, net idman videosu" ürün kararı (PRODUCT-PLAN.md). Saf
 // hesaplama quality.js'te (Node testli); burada sadece her karenin küçük gri kopyasını üretip
 // frame.gray'e koyuyoruz (kamera-sabitliği için) — kimin vuruş olduğunu bilmeyiz, karar
@@ -25,14 +25,14 @@ import { mapCocoToMediapipe, acceptMoveNetPose } from './keypoints.js?v=35';
 // cp-16-netlik: ayrıca her karede vuran adayın (top varsa top, yoksa en yakın oyuncu) çevresinde
 // GERÇEK çözünürlükte (ölçeksiz) bir kırpıntıdan Laplacian varyansı hesaplayıp frame.sharp'a
 // yazıyoruz — 64x36'da oyuncu birkaç piksele indiği için o kapı anlamsızdı (bkz. quality.js başı).
-import { rgbaToGray, laplacianVariance, round2, SHRINK_W, SHRINK_H, SHARP_MIN, SHARP_MAX } from './quality.js?v=35';
+import { rgbaToGray, laplacianVariance, round2, SHRINK_W, SHRINK_H, SHARP_MIN, SHARP_MAX } from './quality.js?v=36';
 // cp-17-top-birlesimi: aynı topun birden fazla kırpıntıda bulunup iki kez sayılmasını önleyen
 // birleştirme (IoU + merkez-mesafesi, saf fonksiyon, Node testli). Detay: balls.js başı.
-import { mergeBallDetections } from './balls.js?v=35';
+import { mergeBallDetections } from './balls.js?v=36';
 // Artifact paketi .tflite/.task'ı da (application/octet-stream reddediliyor) base64 '.b64.txt'ye
 // çevirip yayınlıyor (bkz. scripts/artifact-paketle.mjs) — modelAssetPath yerine baytları kendimiz
 // okuyup modelAssetBuffer ile veriyoruz, hem yerelde hem Artifact'te aynı yol çalışsın diye.
-import { loadModelBytes } from './modelLoader.js?v=35';
+import { loadModelBytes } from './modelLoader.js?v=36';
 
 // import.meta.url tabanlı: sayfa index.html'den de tests/*.html gibi alt dizinden de doğru çözülür.
 const BASE = new URL('./vendor/mediapipe/wasm', import.meta.url).href;
