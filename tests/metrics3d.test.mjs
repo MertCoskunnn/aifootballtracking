@@ -150,3 +150,25 @@ test('posture3d: eğim ve kalça kamera yönünden bağımsız (öne eğik, uylu
     assert.ok(Math.abs(a[k] - b[k]) < 0.5 && Math.abs(a[k] - c[k]) < 0.5, `${k}: ${a[k]} ${b[k]} ${c[k]}`);
   }
 });
+
+test('bodyFrame: kamera döndürülse de aynı vücut koordinatları; aynada rol korunur', async () => {
+  const { bodyFrame } = await import('../metrics3d.js');
+  const w = body({ pitch: 10, thigh: 30, kickFlex: 50 });
+  const a = bodyFrame(w, 'right'), b = bodyFrame(rotY(w, 120), 'right'), m = bodyFrame(mirror(w), 'left');
+  for (const i of [0, 11, 12, 25, 26, 27, 28]) {
+    for (const k of ['f', 'u', 'l']) {
+      assert.ok(Math.abs(a[i][k] - b[i][k]) < 1e-6, `döndürme ${i}.${k}`);
+    }
+  }
+  // Aynada sağ diz (26, vuran) ↔ sol diz (25, vuran): aynı rolde aynı koordinat
+  for (const k of ['f', 'u', 'l']) assert.ok(Math.abs(a[26][k] - m[25][k]) < 1e-6, `ayna ${k}`);
+  assert.ok(a[26].f > 0.1, 'öne kalkık vuran diz önde (+f)');
+  assert.ok(a[25].l > 0 && a[26].l < 0, 'destek tarafı +l');
+});
+
+test('representativeIndex: medyana en yakın kare seçilir, 3D yoksa null', async () => {
+  const { representativeIndex } = await import('../metrics3d.js');
+  const mk = (f) => Object.assign([], { world: body({ supportFlex: f }) });
+  assert.equal(representativeIndex([mk(10), mk(30), mk(90), mk(28), mk(60)], 2, 'right'), 1);
+  assert.equal(representativeIndex([[], [], []], 1, 'right'), null);
+});

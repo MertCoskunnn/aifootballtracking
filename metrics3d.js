@@ -47,18 +47,24 @@ const asinDeg = (v) => deg(Math.asin(Math.max(-1, Math.min(1, v))));
  * yönünden ve aynalamadan bağımsızdır. Dikey eksen kameranın dikeyi: telefon eğik tutulursa gövde
  * açıları o kadar kayar (v1 kuralı: telefon düz ve sabit).
  */
-export function posture3d(w, kickSide) {
-  if (!w || w.length !== 33) return null;
+// Vücut eksenleri (posture3d ve bodyFrame ortak): kalça merkezi, gövde ekseni t, yan eksen lat
+// (vuran → destek tarafı, yatay), ön eksen fwd (yatay; işareti yüzün ve destek ayağının baktığı yön).
+function axes(w, kickSide) {
   const sup = other(kickSide);
-  const flex = (s) => 180 - angle3(w[I.hip[s]], w[I.knee[s]], w[I.ankle[s]]);
   const hipC = mid(w[I.hip.left], w[I.hip.right]);
   const shC = mid(w[I.shoulder.left], w[I.shoulder.right]);
-  const t = unit(sub(shC, hipC)); // gövde ekseni, kalçadan omuza
-  const lat = unit(flat(sub(w[I.hip[sup]], w[I.hip[kickSide]]))); // vuran → destek tarafı, yatay
-  // Ön eksen: yatayda yan eksene dik; işareti yüzün ve destek ayağının baktığı yöne göre seçilir.
+  const t = unit(sub(shC, hipC));
+  const lat = unit(flat(sub(w[I.hip[sup]], w[I.hip[kickSide]])));
   let fwd = unit({ x: lat.z, y: 0, z: -lat.x });
   const look = add(flat(sub(w[I_NOSE], shC)), flat(sub(w[I_TOE[sup]], w[I_HEEL[sup]])));
   if (dot(look, fwd) < 0) fwd = scale(fwd, -1);
+  return { sup, hipC, t, lat, fwd };
+}
+
+export function posture3d(w, kickSide) {
+  if (!w || w.length !== 33) return null;
+  const flex = (s) => 180 - angle3(w[I.hip[s]], w[I.knee[s]], w[I.ankle[s]]);
+  const { sup, t, lat, fwd } = axes(w, kickSide);
   // Kalça: uyluğun, gövde ekseninin aşağı uzantısına göre ön-arka açısı (gövdeye dik ön eksende).
   const fwdT = unit(sub(fwd, scale(t, dot(fwd, t))));
   const thigh = sub(w[I.knee[kickSide]], w[I.hip[kickSide]]);
@@ -70,6 +76,34 @@ export function posture3d(w, kickSide) {
     trunkSide: asinDeg(dot(t, lat)),
     armOpen: angle3(w[I.hip[sup]], w[I.shoulder[sup]], w[I.elbow[sup]]),
   };
+}
+
+/**
+ * İskeleti vücut eksenlerine çevirir (yan yana çizim için, 2026-09-25): her nokta {f, u, l} metre;
+ * f = ön, u = yukarı (kameranın dikeyi), l = destek tarafına. Rol tabanlı olduğu için kamera nerede
+ * olursa olsun ve sol/sağ ayaklı fark etmeksizin iki iskelet aynı yönden çizilir (aynalama dahil).
+ */
+export function bodyFrame(w, kickSide) {
+  if (!w || w.length !== 33) return null;
+  const { hipC, lat, fwd } = axes(w, kickSide);
+  return w.map((q) => { const d = sub(q, hipC); return { f: dot(d, fwd), u: -d.y, l: dot(d, lat) }; });
+}
+
+/**
+ * Temas penceresinde (±half) postürü medyana en yakın karenin indeksi: tek gürültülü kare yerine
+ * temsilî kareyi çizmek için. Dönen: indeks ya da null.
+ */
+export function representativeIndex(track, contact, kickSide, half = 2) {
+  const med = contactPosture(track, contact, kickSide, half);
+  if (!med) return null;
+  let best = null, bestD = Infinity;
+  for (let i = contact - half; i <= contact + half; i++) {
+    const p = posture3d(track?.[i]?.world, kickSide);
+    if (!p) continue;
+    const d = POSTURE_KEYS.reduce((a, k) => a + (Number.isFinite(p[k]) && Number.isFinite(med[k]) ? Math.abs(p[k] - med[k]) : 0), 0);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
 }
 
 export const POSTURE_KEYS = ['supportKnee', 'kickKnee', 'kickHip', 'trunkLean', 'trunkSide', 'armOpen'];

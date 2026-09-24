@@ -12,15 +12,18 @@
 // şeyler: iskeletin oturması (buildTrack), topun bulunması ve temas karesinin bulunması (findKicks) —
 // bunlar hâlâ detect.js/pipeline.js'te. classifyView/suggestMode artık modu/açıyı SEÇMİYOR, sadece
 // "seçtiğin açı ile videonun görünüşü uyuşmuyor" diye yumuşak bir uyarı için kullanılıyor (viewWarning).
-import * as pipeline from './pipeline.js?v=46';
-import { measure, measureFreeKick, buildTrack, bodyLeg } from './metrics.js?v=46';
-import { readOutcome, outcomeProblems, describeOutcome, combineOutcomes } from './outcome.js?v=46';
-import { diagnose, unexplainedNote, kaynakMetni } from './sebep.js?v=46';
-import { evaluate } from './coach.js?v=46';
-import { fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=46';
-import { getRuleSet } from './rules.js?v=46';
-import { pickTrackedPerson, pickDisplayBall, nearestBallWidth, personAtPoint } from './display.js?v=46';
-import { contactPosture, compareToReference, referenceFor } from './metrics3d.js?v=46';
+import * as pipeline from './pipeline.js?v=55';
+import { measure, measureFreeKick, buildTrack, bodyLeg } from './metrics.js?v=55';
+import { readOutcome, outcomeProblems, describeOutcome, combineOutcomes } from './outcome.js?v=55';
+import { diagnose, unexplainedNote, kaynakMetni } from './sebep.js?v=55';
+import { evaluate } from './coach.js?v=55';
+import { fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=55';
+import { getRuleSet } from './rules.js?v=55';
+import { pickTrackedPerson, pickDisplayBall, nearestBallWidth, personAtPoint } from './display.js?v=55';
+import { contactPosture, compareToReference, referenceFor, bodyFrame, representativeIndex } from './metrics3d.js?v=55';
+import { scoreKick, summarizeSession } from './session.js?v=55';
+import { renderSessionSummary } from './session-view.js?v=55';
+import { drawComparison } from './compare-view.js?v=55';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');
@@ -31,7 +34,7 @@ const ctx = canvas.getContext('2d');
 // (bir vuruşun kendi penceresi, ya da elle-düzelt için ilk birkaç saniye).
 // track: seçilen oyuncunun kare kare tek iskeleti (frames ile aynı uzunlukta).
 // kicks: taramada bulunan tüm vuruşlar, her biri kendi frames penceresini taşır (tekrar oynatılabilsin diye).
-const state = { frames: [], track: null, index: 0, contact: null, ball: null, busy: false, kicks: [], activeKick: null, stopRequested: false, seed: null, pickingPlayer: false };
+const state = { frames: [], track: null, index: 0, contact: null, ball: null, busy: false, kicks: [], activeKick: null, stopRequested: false, seed: null, pickingPlayer: false, showCompare: false };
 
 // Hata ayıklama: tarayıcı konsolundan (ve Frodo'nun doğrulama aracından) durumu okumak için.
 window.__hoca = state;
@@ -40,7 +43,7 @@ window.__hoca = state;
 // videosundan uygulamanın kendi hattıyla ÖLÇÜLDÜ (tests/postur.html → referans/messi-plase.json).
 // undefined = henüz yükleniyor, null = yüklenemedi. Analiz yükleme bitmeden gelirse bekleyip tekrar çalışır.
 let messiRef;
-const messiRefReady = fetch('referans/messi-plase.json?v=46').then((r) => (r.ok ? r.json() : null)).catch(() => null)
+const messiRefReady = fetch('referans/messi-plase.json?v=55').then((r) => (r.ok ? r.json() : null)).catch(() => null)
   .then((j) => { messiRef = j; });
 
 function setStatus(t) { $('status').textContent = t; }
@@ -207,6 +210,7 @@ async function scanVideo() {
   if (!result.kicks.length) { await fallbackManual(result.fallbackFrames); setBusy(false); return; }
   state.kicks = result.kicks;
   setBusy(false);
+  await scoreSession();
   renderKickList();
   // İlk vuruşu hemen aç. Eskiden sadece liste çıkıyordu, hiçbir vuruş yüklenmiyordu: oynat
   // butonu çalışmıyor, video işlemenin son karesinde "donmuş" görünüyordu (Mert'in 5 sn'lik testi).
@@ -455,6 +459,7 @@ $('file').addEventListener('change', async (e) => {
   if (!f) return;
   Object.assign(state, { contact: null, ball: null, track: null, kicks: [], activeKick: null });
   $('report').hidden = true;
+  $('sessionSummary').hidden = true;
   $('kickList').hidden = true;
   $('noKick').hidden = true;
   $('stageWrap').hidden = false;
@@ -495,7 +500,7 @@ $('mode').addEventListener('change', () => {
   updateReady();
   runAnalysis(); // mod değişince mevcut temas/topla yeniden analiz et (üçü de seçiliyse)
 });
-$('foot').addEventListener('change', () => { draw(); updateReady(); runAnalysis(); });
+$('foot').addEventListener('change', () => { draw(); updateReady(); runAnalysis(); scoreSession(); });
 
 document.addEventListener('keydown', (e) => {
   if (state.busy || $('stageWrap').hidden) return;
@@ -644,6 +649,49 @@ function runAnalysis() {
   } catch (err) { setStatus(err.message); }
 }
 
+// Seans özeti (v1.5, 2026-09-25): videodaki TÜM vuruşlar, raporla aynı zincirle (session.js#scoreKick)
+// puanlanır; listeye puan yazılır, 2+ vuruşta özet çıkar. Ayak seçilmeden puanlanmaz (aynalama ayağa bağlı).
+async function scoreSession() {
+  const el = $('sessionSummary');
+  const foot = effectiveFoot();
+  if (!state.kicks.length || !foot || effectiveMode() !== 'placement') { el.hidden = true; return; }
+  await messiRefReady;
+  // Açık vuruşta kullanıcı oyuncuyu elle seçtiyse rapor o kişiyi puanlıyor: özet de aynı kişiyi.
+  const results = state.kicks.map((k) => scoreKick(k, foot, messiRef, k === state.activeKick ? state.seed : null));
+  state.kicks.forEach((k, i) => { k.score = results[i].total; });
+  renderKickList();
+  renderSessionSummary(el, summarizeSession(results), (t) => {
+    const i = state.kicks.findIndex((k) => k.t === t);
+    if (i >= 0) loadKick(i);
+  });
+}
+
+// Yan yana iskelet (v1.5): temas penceresinde medyana en yakın kare, vücut eksenlerinde; Messi'nin
+// temsilî temas iskeleti referans dosyasında (iskelet). Tuşla açılır kapanır, durum raporlar arası korunur.
+function compareBlock() {
+  return messiRef?.iskelet
+    ? `<button id="cmpBtn" class="toggle">${state.showCompare ? 'Messi ile kıyası gizle' : 'Messi ile yan yana göster'}</button>
+       <div id="cmpWrap" ${state.showCompare ? '' : 'hidden'}><canvas id="cmpCanvas" width="720" height="620"></canvas>
+       <p class="hint">Temas anı, vücudun kendi eksenlerinden: kamera nerede olursa olsun tam yandan ve tam önden. Turuncu vuran taraf (bacak ve kol), mavi destek tarafı. Messi'nin çizimi gerçek temas karesi (6.10 sn); rapordaki Messi sayıları iki vuruşun ortalaması, bu yüzden çizimle birkaç derece farklı olabilir.</p></div>`
+    : '';
+}
+function wireCompare(foot) {
+  const btn = $('cmpBtn');
+  if (!btn) return;
+  const paint = () => {
+    const i = representativeIndex(state.track, state.contact, foot);
+    const me = i === null ? null : bodyFrame(state.track[i].world, foot);
+    if (me) drawComparison($('cmpCanvas'), me, foot, messiRef.iskelet);
+  };
+  btn.addEventListener('click', () => {
+    state.showCompare = !state.showCompare;
+    $('cmpWrap').hidden = !state.showCompare;
+    btn.textContent = state.showCompare ? 'Messi ile kıyası gizle' : 'Messi ile yan yana göster';
+    if (state.showCompare) paint();
+  });
+  if (state.showCompare) paint();
+}
+
 // Messi kıyas raporu. 3D noktalar yoksa (MoveNet yedeği ya da temasta iskelet yok) puan verilmez:
 // tahmin edilen bir puan, gösterilmeyen bir puandan kötüdür.
 function placementReport(foot) {
@@ -675,8 +723,10 @@ function placementReport(foot) {
         <div class="bar"><i class="${band(i.score)}" style="width:${i.score}%"></i></div>
         ${i.tip ? `<span class="tip">${i.tip}</span>` : ''}
       </div>`).join('')}
+    ${compareBlock()}
     <p class="hint">Açılar 3D iskeletten (MediaPipe) ölçülür: yandan ve arkadan çekimde aynı eklem açısı. Sadece vuruş anı postürü puanlanır, koşu ve topun gidişi puana girmez.</p>`;
   el.hidden = false;
+  wireCompare(foot);
   el.scrollIntoView({ behavior: 'smooth' });
   return cmp;
 }

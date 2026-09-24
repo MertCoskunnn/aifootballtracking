@@ -6,14 +6,14 @@
 // kendisine verilen `video` elemanını (ve vision.js'i) kullanır — bir <video id="..."> arar gibi
 // document'a gitmez. Saf kısımlar (collectKicks, analyzeKick, eşleştirme/tolerans) analysis.js'te:
 // vision.js Node'da import edilemediği için (CDN URL'i), o dosya Node testlerinde kullanılabiliyor.
-import { processRange, setMoveNetEnabled, getVisionStats } from './vision.js?v=46';
-import { candidateWindows } from './scan.js?v=46';
-import { collectKicks, analyzeKick } from './analysis.js?v=46';
+import { processRange, setMoveNetEnabled, getVisionStats, resetVisionTimers } from './vision.js?v=55';
+import { candidateWindows } from './scan.js?v=55';
+import { collectKicks, analyzeKick } from './analysis.js?v=55';
 
 export { collectKicks, analyzeKick };
 // cp-12-movenet: vision.js'in MoveNet açma/kapama ve istatistik uçları, app.js ve regresyon
 // sayfası vision.js'e doğrudan import atmasın diye buradan geçiyor (mevcut mimariyle tutarlı).
-export { setMoveNetEnabled, getVisionStats };
+export { setMoveNetEnabled, getVisionStats, resetVisionTimers };
 
 // pas 2: her aday pencere bu hızda işlenir (findKicks bunun üstünde ayarlandı)
 export const DENSE_FPS = 30;
@@ -84,6 +84,7 @@ export async function scanWindow(video, t0, t1, opts = {}) {
  *     YOKTUR — o ana kadar bulunan vuruşlar geçerli sayılır (app.js'teki eski davranışla aynı).
  */
 export async function scanVideo(video, { onProgress, onFrame, shouldStop } = {}) {
+  resetVisionTimers(); // süre sayaçları tarama başına (getVisionStats().ms)
   const dur = await realDuration(video);
   const stopped = () => !!shouldStop?.();
   const wrap = (label) => ({

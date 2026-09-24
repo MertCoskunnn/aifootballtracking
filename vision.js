@@ -16,8 +16,8 @@ import { PoseLandmarker, ObjectDetector, FilesetResolver } from './vendor/mediap
 // kutusunda BlazePose başarısız olunca devreye girer (aşağıdaki personBoxes döngüsü). Ağır
 // (TF.js/model) iş movenet.js'te, saf 17→33 nokta dönüşümü keypoints.js'te (Node testli) —
 // bu dosya sadece ikisini birbirine bağlar.
-import * as movenet from './movenet.js?v=46';
-import { mapCocoToMediapipe, acceptMoveNetPose } from './keypoints.js?v=46';
+import * as movenet from './movenet.js?v=55';
+import { mapCocoToMediapipe, acceptMoveNetPose } from './keypoints.js?v=55';
 // cp-15-kalite-kapisi: "sabit kameralı, net idman videosu" ürün kararı (PRODUCT-PLAN.md). Saf
 // hesaplama quality.js'te (Node testli); burada sadece her karenin küçük gri kopyasını üretip
 // frame.gray'e koyuyoruz (kamera-sabitliği için) — kimin vuruş olduğunu bilmeyiz, karar
@@ -25,20 +25,36 @@ import { mapCocoToMediapipe, acceptMoveNetPose } from './keypoints.js?v=46';
 // cp-16-netlik: ayrıca her karede vuran adayın (top varsa top, yoksa en yakın oyuncu) çevresinde
 // GERÇEK çözünürlükte (ölçeksiz) bir kırpıntıdan Laplacian varyansı hesaplayıp frame.sharp'a
 // yazıyoruz — 64x36'da oyuncu birkaç piksele indiği için o kapı anlamsızdı (bkz. quality.js başı).
-import { rgbaToGray, laplacianVariance, round2, SHRINK_W, SHRINK_H, SHARP_MIN, SHARP_MAX } from './quality.js?v=46';
+import { rgbaToGray, laplacianVariance, round2, SHRINK_W, SHRINK_H, SHARP_MIN, SHARP_MAX } from './quality.js?v=55';
 // cp-17-top-birlesimi: aynı topun birden fazla kırpıntıda bulunup iki kez sayılmasını önleyen
 // birleştirme (IoU + merkez-mesafesi, saf fonksiyon, Node testli). Detay: balls.js başı.
-import { mergeBallDetections } from './balls.js?v=46';
+import { mergeBallDetections } from './balls.js?v=55';
 // Artifact paketi .tflite/.task'ı da (application/octet-stream reddediliyor) base64 '.b64.txt'ye
 // çevirip yayınlıyor (bkz. scripts/artifact-paketle.mjs) — modelAssetPath yerine baytları kendimiz
 // okuyup modelAssetBuffer ile veriyoruz, hem yerelde hem Artifact'te aynı yol çalışsın diye.
-import { loadModelBytes } from './modelLoader.js?v=46';
+import { loadModelBytes } from './modelLoader.js?v=55';
 
 // import.meta.url tabanlı: sayfa index.html'den de tests/*.html gibi alt dizinden de doğru çözülür.
 const BASE = new URL('./vendor/mediapipe/wasm', import.meta.url).href;
 const POSE_MODEL = new URL('./models/mediapipe/pose_landmarker_full.task', import.meta.url).href;
 const BALL_MODEL = new URL('./models/mediapipe/efficientdet_lite0.tflite', import.meta.url).href;
 const CROP = 320; // kırpıntının modele verildiği boyut (piksel)
+
+// 2026-09-25 hız denemesi (yazılım WebGL, Microsoft Basic Render Driver): top modeli GPU 300 ms /
+// CPU 112 ms. Ama CPU'ya geçince hassas bir klipte bulunan vuruş değişti (1.07 → 0.60 sn), bu yüzden
+// varsayılan GPU kaldı; __hocaBallDelegate ile sadece test için değiştirilebilir. İskelet modeli
+// CPU'da hiç kullanılamaz: 3D noktaları bambaşka (Messi'nin destek dizi 40° yerine 128°) ve Messi
+// referansı GPU yolunda ölçüldü. renderer bilgisi istatistikte duruyor: yavaşlık şikâyetinde bakılır.
+export function isSoftwareGL(renderer) {
+  return /swiftshader|basic render|llvmpipe|softpipe|software|warp/i.test(renderer || '');
+}
+function glRenderer() {
+  try {
+    const gl = document.createElement('canvas').getContext('webgl');
+    const ext = gl?.getExtension('WEBGL_debug_renderer_info');
+    return gl ? String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER)) : '';
+  } catch { return ''; }
+}
 
 let models = null;
 async function load() {
@@ -63,10 +79,15 @@ async function load() {
   // olarak buldu. Kutuyu kırpıp büyütünce iskelet çıktı (0 → 3-5 kişi/kare).
   // Aynı nesne modeli hem topu hem insanı arar (tek çağrı). poseBytes iki modelde de (pose/poseOne)
   // aynı Uint8Array — MediaPipe her createFromOptions çağrısında kendi wasm belleğine kopyalıyor.
+  const renderer = glRenderer();
+  // globalThis.__hocaBallDelegate: test için zorla ('CPU' | 'GPU'), modeller yüklenmeden önce ayarlanır.
+  const delegate = 'GPU';
+  const ballDelegate = globalThis.__hocaBallDelegate || 'GPU';
+  Object.assign(visionStats, { delegate, ballDelegate, renderer, softwareGL: isSoftwareGL(renderer) });
   const [pose, poseOne, ball] = await Promise.all([
-    PoseLandmarker.createFromOptions(fs, { baseOptions: { modelAssetBuffer: poseBytes, delegate: 'GPU' }, runningMode: 'IMAGE', numPoses: 3 }),
-    PoseLandmarker.createFromOptions(fs, { baseOptions: { modelAssetBuffer: poseBytes, delegate: 'GPU' }, runningMode: 'IMAGE', numPoses: 1 }),
-    ObjectDetector.createFromOptions(fs, { baseOptions: { modelAssetBuffer: ballBytes, delegate: 'GPU' }, runningMode: 'IMAGE', categoryAllowlist: ['sports ball', 'person'], scoreThreshold: 0.12, maxResults: 25 }),
+    PoseLandmarker.createFromOptions(fs, { baseOptions: { modelAssetBuffer: poseBytes, delegate }, runningMode: 'IMAGE', numPoses: 3 }),
+    PoseLandmarker.createFromOptions(fs, { baseOptions: { modelAssetBuffer: poseBytes, delegate }, runningMode: 'IMAGE', numPoses: 1 }),
+    ObjectDetector.createFromOptions(fs, { baseOptions: { modelAssetBuffer: ballBytes, delegate: ballDelegate }, runningMode: 'IMAGE', categoryAllowlist: ['sports ball', 'person'], scoreThreshold: 0.12, maxResults: 25 }),
   ]);
   return (models = { pose, poseOne, ball });
 }
@@ -88,13 +109,20 @@ let moveNetEnabled = true; // varsayılan açık (GECE-PLANI)
 let moveNetModel = null;
 let moveNetLoadPromise = null;
 let moveNetFailed = false; // TF.js/model bir kez yüklenemezse kalıcı kapanır, tarama çökmesin
-const visionStats = { moveNetCalls: 0, moveNetAccepted: 0, loadMs: 0 };
+// ms: tarama döngüsünün her adımına giden süre (2026-09-25, hız işi): neyi hızlandıracağımızı ölçerek seçelim.
+const visionStats = { moveNetCalls: 0, moveNetAccepted: 0, loadMs: 0, frames: 0, poseCrops: 0, ballCrops: 0,
+  ms: { seek: 0, draw: 0, pose: 0, ball: 0, poseCrop: 0, moveNet: 0, ballCrop: 0, quality: 0 } }; // poseCrop, moveNet'i de içerir
+const now = () => performance.now();
 
 /** Regresyon sayfası (?movenet=0) ve ileride app.js için A/B anahtarı. */
 export function setMoveNetEnabled(v) { moveNetEnabled = !!v; }
 
-/** { moveNetCalls, moveNetAccepted, loadMs } — regresyon sayfası gösterebilsin diye. */
-export function getVisionStats() { return { ...visionStats }; }
+/** { moveNetCalls, moveNetAccepted, loadMs, frames, ms:{...} } — regresyon sayfası gösterebilsin diye. */
+export function getVisionStats() { return { ...visionStats, ms: { ...visionStats.ms } }; }
+export function resetVisionTimers() {
+  Object.assign(visionStats, { frames: 0, poseCrops: 0, ballCrops: 0 });
+  for (const k of Object.keys(visionStats.ms)) visionStats.ms[k] = 0;
+}
 
 // TF.js + modeli bir kez yükler (sonraki çağrılar aynı sözü paylaşır). Hata olursa MoveNet'i
 // kalıcı kapatır ve bir kez uyarır — tarama bu yüzden asla çökmemeli.
@@ -178,14 +206,21 @@ export async function processRange(video, { t0 = 0, t1 = video.duration, fps = 3
   for (let i = 0; i < total; i++) {
     if (shouldStop?.()) break;
     const t = t0 + i / fps;
+    const ms = visionStats.ms;
+    let t_ = now();
     await seek(video, Math.min(video.duration - 0.001, t));
+    ms.seek += now() - t_; t_ = now();
     fctx.drawImage(video, 0, 0, W, H);
+    ms.draw += now() - t_; t_ = now();
+    visionStats.frames++;
     // 2026-09-24 gece: MediaPipe'ın 3D (world) noktaları da saklanıyor: kalça merkezli, metre
     // cinsinden tahmin. Eklem açısı 3D'den hesaplanınca kamera açısından (yandan/arkadan) büyük
     // ölçüde bağımsız olur (metrics3d.js). 2D veri sözleşmesi değişmez: 3D, dizinin `world` özelliği.
     const res = pose.detect(frameCv);
     const people = res.landmarks.map((p, k) => withWorld(p.map((q) => ({ x: q.x * W, y: q.y * H, v: q.visibility ?? 1 })), res.worldLandmarks?.[k]));
+    ms.pose += now() - t_; t_ = now();
     const dets = ball.detect(frameCv).detections;
+    ms.ball += now() - t_; t_ = now();
     const balls = dets.filter(isBall).map((d) => box(d, 0, 0, 1));
     // İki aşamalı iskelet: nesne modelinin bulduğu ama iskeleti henüz çıkmamış her kişi kutusunu
     // kırpıp büyüt, tek kişilik iskelet modeline ver, noktaları tam kareye geri çevir.
@@ -209,6 +244,7 @@ export async function processRange(video, { t0 = 0, t1 = video.duration, fps = 3
       cctx.clearRect(0, 0, CROP, CROP);
       cctx.drawImage(frameCv, x0, y0, s, s, 0, 0, CROP, CROP);
       const one = poseOne.detect(cropCv);
+      visionStats.poseCrops++;
       const found = one.landmarks[0];
       if (found) {
         // 3D (world) noktalar kırpıntıdan bağımsız: kalça merkezli metre, ölçek/konum dönüşümü gerekmez.
@@ -219,18 +255,25 @@ export async function processRange(video, { t0 = 0, t1 = video.duration, fps = 3
         // AYNI kırpıntı bölgesini (x0,y0,s) MoveNet'e veriyoruz, başka hiçbir yerde çalışmıyor.
         mnCtx.clearRect(0, 0, MOVENET_INPUT, MOVENET_INPUT);
         mnCtx.drawImage(frameCv, x0, y0, s, s, 0, 0, MOVENET_INPUT, MOVENET_INPUT);
+        const t_mn = now();
         const mnPerson = await tryMoveNet(mnCv, x0, y0, s);
+        ms.moveNet += now() - t_mn;
         if (mnPerson) people.push(mnPerson);
       }
     }
-    // Top kırpıntıları: her kişinin ayak çevresi + topun son bilinen yeri
+    ms.poseCrop += now() - t_; t_ = now();
+    // Top kırpıntıları: her kişinin ayak çevresi + topun son bilinen yeri.
+    // 2026-09-25: "sadece topa yakın kişiler" sınırlaması denendi, %5 hız için bir klipte bulunan
+    // vuruşu değiştirdi (1.07 → 0.50 sn). Düşük güvenli sahte top her kişiyi "yakın" gösteriyordu. Geri alındı.
     const regions = people.map(feetRegion);
     if (lastBall) regions.push({ x: lastBall.x, y: lastBall.y, s: Math.max(160, lastBall.w * 8) });
     for (const r of regions) {
       cctx.clearRect(0, 0, CROP, CROP);
       cctx.drawImage(frameCv, r.x - r.s / 2, r.y - r.s / 2, r.s, r.s, 0, 0, CROP, CROP);
       for (const d of ball.detect(cropCv).detections.filter(isBall)) balls.push(box(d, r.x - r.s / 2, r.y - r.s / 2, r.s / CROP));
+      visionStats.ballCrops++;
     }
+    ms.ballCrop += now() - t_; t_ = now();
     const merged = dedupe(balls);
     const bestNear = merged.sort((a, b) => b.s - a.s)[0];
     if (bestNear) lastBall = bestNear;
@@ -259,6 +302,7 @@ export async function processRange(video, { t0 = 0, t1 = video.duration, fps = 3
       const sharpGray = rgbaToGray(cctx.getImageData(0, 0, sz, sz).data, sz, sz);
       sharp = round2(laplacianVariance(sharpGray, sz, sz));
     }
+    ms.quality += now() - t_;
     const frame = {
       t, people, balls: merged, sharp,
       gray: { data: gray, w: SHRINK_W, h: SHRINK_H, sx: SHRINK_W / W, sy: SHRINK_H / H },

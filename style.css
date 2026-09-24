@@ -73,3 +73,17 @@ button.stop { background: var(--bad); color: #2a0a0a; border: none; font-weight:
 .kickRow .kf { font-weight: 600; }
 .kickRow .kv { color: var(--muted); font-size: .9rem; cursor: help; }
 .kickRow .ks { font-weight: 700; text-align: right; }
+
+/* Seans özeti (2026-09-25) */
+.session { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin: 16px 0; }
+.session h2 { margin: 0 0 8px; }
+.session p { margin: 6px 0; }
+.session .hint { color: var(--muted); font-size: .9rem; }
+.session ul { margin: 4px 0 0; padding-left: 18px; }
+.session li { margin: 6px 0; color: var(--muted); }
+.sessionTime { color: var(--pitch); font-weight: 700; cursor: pointer; text-decoration: underline; }
+.sessionTime:hover { opacity: .85; }
+
+/* Messi ile yan yana (2026-09-25) */
+button.toggle { margin: 14px 0 6px; padding: 8px 14px; border: 1px solid var(--pitch); background: transparent; color: var(--pitch); font-weight: 700; border-radius: 10px; }
+#cmpWrap canvas { width: 100%; max-width: 720px; height: auto; background: #0b120e; border-radius: 12px; display: block; }
