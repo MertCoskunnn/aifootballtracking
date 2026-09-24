@@ -5,7 +5,7 @@
 // her bulunan vuruşu üç modda (shot/placement/freekick) ayrı ayrı analiz eder. Frodo bu ham
 // verilerle coach.js'teki eşikleri kalibre edecek (hedef kullanıcı: sahada tek başına idman
 // yapan oyuncu) — bu yüzden burada hiçbir "beklenen" değerle karşılaştırma yapılmaz.
-import * as pipeline from '../pipeline.js?v=25';
+import * as pipeline from '../pipeline.js?v=26';
 
 const params = new URLSearchParams(location.search);
 const AUTO = params.get('auto') === '1';
