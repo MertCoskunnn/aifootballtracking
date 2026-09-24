@@ -2,8 +2,8 @@
 // böylece "Messi hâlâ 100 mü, Mert hâlâ 82/88 mi" kontrolü elle tıklamaya değil tek bir koda dayanır.
 // tests/beklenen.json'daki her video için ya sadece beklenen zamanın etrafını (mod=pencere, hızlı)
 // ya da videonun tamamını (mod=tam) tarar, bulunan vuruşu analiz eder ve beklenenle karşılaştırır.
-import * as pipeline from '../pipeline.js?v=43';
-import { matchByDuration, withinTolerance } from '../analysis.js?v=43';
+import * as pipeline from '../pipeline.js?v=44';
+import { matchByDuration, withinTolerance } from '../analysis.js?v=44';
 
 const params = new URLSearchParams(location.search);
 const MODE = params.get('mod') === 'tam' ? 'tam' : 'pencere';

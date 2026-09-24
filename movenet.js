@@ -11,7 +11,7 @@
 // çevirip yayınlıyor (bkz. scripts/artifact-paketle.mjs). tf.loadGraphModel bunu bilmiyor (doğrudan
 // .bin fetch eder), o yüzden model.json + shard'ları kendimiz loadModelBytes ile okuyup
 // tf.io.fromMemory'e veriyoruz — yerelde de (ham .bin dosyaları duruyor) aynı yol çalışır.
-import { loadModelBytes, concatBytes } from './modelLoader.js?v=43';
+import { loadModelBytes, concatBytes } from './modelLoader.js?v=44';
 
 const TFJS_URL = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js';
 const MODEL_URL = new URL('./models/movenet-thunder/model.json', import.meta.url);
