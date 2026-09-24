@@ -22,6 +22,9 @@ import { mapCocoToMediapipe, acceptMoveNetPose } from './keypoints.js?v=25';
 // GERÇEK çözünürlükte (ölçeksiz) bir kırpıntıdan Laplacian varyansı hesaplayıp frame.sharp'a
 // yazıyoruz — 64x36'da oyuncu birkaç piksele indiği için o kapı anlamsızdı (bkz. quality.js başı).
 import { rgbaToGray, laplacianVariance, round2, SHRINK_W, SHRINK_H, SHARP_MIN, SHARP_MAX } from './quality.js?v=25';
+// cp-17-top-birlesimi: aynı topun birden fazla kırpıntıda bulunup iki kez sayılmasını önleyen
+// birleştirme (IoU + merkez-mesafesi, saf fonksiyon, Node testli). Detay: balls.js başı.
+import { mergeBallDetections } from './balls.js?v=25';
 
 const BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm';
 const POSE_MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task';
@@ -258,11 +261,9 @@ function box(d, ox, oy, k) {
   return { x: ox + (b.originX + b.width / 2) * k, y: oy + (b.originY + b.height / 2) * k, w: b.width * k, s: d.categories[0].score };
 }
 
-// Aynı top birden fazla kırpıntıda bulunabilir: merkezleri yarım çaptan yakın olanları tek sayar
-function dedupe(balls) {
-  const out = [];
-  for (const b of balls.sort((a, c) => c.s - a.s)) {
-    if (!out.some((o) => Math.hypot(o.x - b.x, o.y - b.y) < 0.5 * Math.max(o.w, b.w))) out.push(b);
-  }
-  return out;
-}
+// cp-17-top-birlesimi: aynı top birden fazla kırpıntıda bulunabilir (tam kare + her oyuncunun
+// ayak çevresi + son bilinen top konumu, bkz. yukarıdaki döngü) — merkez-mesafesi TEK BAŞINA
+// kırpıntı kenarında küçülmüş/kaymış tespitleri kaçırabiliyordu (Mert'in raporu: aynı topa 2
+// çember). IoU + merkez-mesafesi birlikte bakan saf mantık artık balls.js'te (Node testli,
+// tests/balls.test.mjs) — burada sadece çağrılıyor.
+const dedupe = mergeBallDetections;
