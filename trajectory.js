@@ -53,12 +53,58 @@ const ANCHOR_WEIGHT = 10;
 const DEFAULT_BALL_WIDTH = 20;
 const MIN_THRESHOLD_PX = 4;
 
+// cp-20-sabit-top: kalabalık/antrenman sahnesinde yerde duran BAŞKA bir top olabilir. O top her
+// karede (neredeyse) aynı yerde göründüğü için RANSAC'a "mükemmel" bir sıfır-hız modeli sunar —
+// uçan gerçek top ise 25 fps'te seyrek/bulanık tespit edilir ve daha az inlier toplar. Sonuç: RANSAC
+// yanlışlıkla yerdeki topu seçebiliyordu (bkz. bug raporu: nişangah temas sonrası havadaki topa değil
+// ~80px uzaktaki duran topa atlıyordu). İki savunma satırı:
+//  1) collectCandidates(...,{contactAnchor}): temas ÖNCESİ sahnede duran (ve temas topunun kendisi
+//     OLMAYAN) top kümelerini bulur, temas SONRASI adaylardan bu kümelere yakın olanları eler.
+//  2) fitFlight: son çare olarak, oturttuğu eğri temastan sonraki ilk MIN_START_DISPLACEMENT_SEC
+//     içinde en az MIN_START_DISPLACEMENT_FACTOR×topÇapı kadar uzaklaşmıyorsa (hız≈0 demektir,
+//     muhtemelen bir sabit topa kilitlenmiştir) reddeder (null) — nişangah asla sabit topa atlamaz,
+//     olsa olsa "iz yok" gösterir.
+const STATIONARY_LOOKBACK_SEC = 0.5;
+const STATIONARY_CLUSTER_MIN_FRAMES = 2;
+const MIN_START_DISPLACEMENT_SEC = 0.2;
+const MIN_START_DISPLACEMENT_FACTOR = 1.5;
+
 function median(nums) {
   const s = [...nums].sort((a, b) => a - b);
   const n = s.length;
   if (!n) return undefined;
   const mid = n >> 1;
   return n % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+const avg = (nums) => nums.reduce((s, v) => s + v, 0) / nums.length;
+
+// Temas ÖNCESİ ~lookbackSec içinde, birden çok karede aynı yerde kalan (kümelenen) top tespitleri —
+// "duran toplar". Bunlardan temas ankorunun KENDİSİ olanı (asıl vurulacak top, o da vurulmadan önce
+// durur) hariç tutulur: ankora bir top çapından daha yakın kümeler "temas topu" sayılır, elenmez.
+function findStationaryDecoys(frames, contact, anchor, lookbackSec) {
+  if (!anchor || !Array.isArray(frames)) return [];
+  const contactT = frames[contact]?.t ?? 0;
+  const pts = [];
+  for (let i = contact - 1; i >= 0; i--) {
+    const f = frames[i];
+    if (!f) continue;
+    if (contactT - f.t > lookbackSec) break;
+    for (const b of f.balls || []) pts.push({ x: b.x, y: b.y, w: b.w });
+  }
+  if (pts.length < STATIONARY_CLUSTER_MIN_FRAMES) return [];
+  const clusters = [];
+  for (const p of pts) {
+    const r = Math.max(6, (p.w || DEFAULT_BALL_WIDTH) * 0.6);
+    const c = clusters.find((c) => Math.hypot(c.x - p.x, c.y - p.y) < r);
+    if (c) { c.pts.push(p); c.x = avg(c.pts.map((q) => q.x)); c.y = avg(c.pts.map((q) => q.y)); }
+    else clusters.push({ x: p.x, y: p.y, pts: [p] });
+  }
+  const anchorR = Math.max(10, anchor.w || DEFAULT_BALL_WIDTH);
+  return clusters
+    .filter((c) => c.pts.length >= STATIONARY_CLUSTER_MIN_FRAMES)
+    .filter((c) => Math.hypot(c.x - anchor.x, c.y - anchor.y) > anchorR) // temas topunun kendisi değil
+    .map((c) => ({ x: c.x, y: c.y, w: median(c.pts.map((p) => p.w).filter((w) => Number.isFinite(w))) || DEFAULT_BALL_WIDTH }));
 }
 
 function estimateBallWidth(points, forced) {
@@ -192,6 +238,15 @@ export function fitFlight(points, contactT, opts = {}) {
   const rmsPx = Math.sqrt(sumSq / idxs.length);
   const tEnd = Math.max(...idxs.map((i) => pts[i].t));
 
+  // cp-20-sabit-top savunması #2: eğri temastan sonraki ilk MIN_START_DISPLACEMENT_SEC içinde
+  // yeterince uzaklaşmıyorsa (hız≈0) bir sabit topa kilitlenmiş olabilir — nişangah asla oraya
+  // atlamasın diye null dönüyoruz (çağıran taraf "iz yok" gösterir, eski kare-tabanlı yedeğe düşmez).
+  const minStartSec = opts.minStartSec ?? MIN_START_DISPLACEMENT_SEC;
+  const minStartFactor = opts.minStartFactor ?? MIN_START_DISPLACEMENT_FACTOR;
+  const startDx = fx[1] * minStartSec + fx[2] * minStartSec * minStartSec;
+  const startDy = fy[1] * minStartSec + fy[2] * minStartSec * minStartSec;
+  if (Math.hypot(startDx, startDy) < minStartFactor * ballW) return null;
+
   return {
     coef: { x0: fx[0], vx: fx[1], ax: fx[2], y0: fy[0], vy: fy[1], ay: fy[2] },
     contactT,
@@ -247,16 +302,28 @@ export function flightPath(fit, tNow, samples = 40) {
  * fitFlight için aday nokta havuzu: contact karesinden başlayıp maxSec saniye boyunca
  * HER karedeki TÜM top tespitlerini toplar (ballFlight'ın aksine tek adaya indirgemez) —
  * RANSAC hangisinin gerçek yörünge olduğuna kendi karar versin diye. Dönen: [{t,x,y,w}].
+ *
+ * opts.contactAnchor verilirse (cp-20-sabit-top): temas ÖNCESİ sahnede duran, temas topunun
+ * KENDİSİ olmayan top kümeleri (findStationaryDecoys) bulunur; temas SONRASI adaylardan bu
+ * kümelere ~1 top çapı yakın olanlar RANSAC'a hiç girmeden elenir. opts.lookbackSec bu kümeleri
+ * ne kadar geriye bakarak arayacağını belirler (varsayılan STATIONARY_LOOKBACK_SEC).
  */
-export function collectCandidates(frames, contact, maxSec = 1.5) {
+export function collectCandidates(frames, contact, maxSec = 1.5, opts = {}) {
   const out = [];
   if (!Array.isArray(frames) || contact == null || contact < 0 || contact >= frames.length) return out;
   const t0 = frames[contact]?.t ?? 0;
+  const decoys = opts.contactAnchor
+    ? findStationaryDecoys(frames, contact, opts.contactAnchor, opts.lookbackSec ?? STATIONARY_LOOKBACK_SEC)
+    : [];
   for (let i = contact; i < frames.length; i++) {
     const f = frames[i];
     if (!f) continue;
     if (f.t - t0 > maxSec) break;
-    for (const b of f.balls || []) out.push({ t: f.t, x: b.x, y: b.y, w: b.w });
+    for (const b of f.balls || []) {
+      const nearDecoy = decoys.some((d) => Math.hypot(d.x - b.x, d.y - b.y) < Math.max(d.w || DEFAULT_BALL_WIDTH, b.w || DEFAULT_BALL_WIDTH));
+      if (nearDecoy) continue;
+      out.push({ t: f.t, x: b.x, y: b.y, w: b.w });
+    }
   }
   return out;
 }

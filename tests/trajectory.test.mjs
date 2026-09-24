@@ -127,3 +127,53 @@ test('collectCandidates: maxSec penceresi içindeki her karenin TÜM top adaylar
   assert.equal(cands.length, 3);
   assert.ok(cands.every((c) => 'w' in c));
 });
+
+// --- cp-20-sabit-top: gerçek bug raporunun regresyon testi ---
+// Sahne: Messi antrenman klibi gibi, temas topunun ~80px yanında YERDE DURAN başka bir top var.
+// O top temastan önce VE sonra her karede aynı yerde görünüyor; uçan gerçek top ise 25 fps'te
+// seyrek/gürültülü tespit ediliyor. RANSAC saf inlier sayısına bakarsa duran topu "mükemmel uyum"
+// sayıp seçebilir — bunun ASLA olmaması gerekiyor (fit ya uçan topu bulur ya da null döner).
+test('fitFlight+collectCandidates: sahada duran ikinci top varken asla o topu seçmez (uçan topu bulur ya da null döner)', () => {
+  const dt = 0.04;
+  const contactT = 3.0;
+  const anchor = { x: 220, y: 400, w: 20 };
+  const decoy = { x: 300, y: 550, w: 20 }; // ankordan ~170px uzakta, hareketsiz, "yerde duran diğer top"
+  const trueCoef = { x0: 220, vx: -100, ax: 0, y0: 400, vy: -320, ay: 450 };
+  const trueAt = (tau) => ({ x: trueCoef.x0 + trueCoef.vx * tau, y: trueCoef.y0 + trueCoef.vy * tau + trueCoef.ay * tau * tau });
+
+  const frames = [];
+  // temastan önce ~0.52sn: hem (henüz vurulmamış, duran) gerçek top ankorda hem decoy her karede görünür
+  for (let i = -13; i < 0; i++) {
+    frames.push({ t: contactT + i * dt, balls: [{ x: anchor.x, y: anchor.y, w: anchor.w }, { x: decoy.x, y: decoy.y, w: decoy.w }] });
+  }
+  // temas karesi
+  frames.push({ t: contactT, balls: [{ x: anchor.x, y: anchor.y, w: anchor.w }, { x: decoy.x, y: decoy.y, w: decoy.w }] });
+  // temastan sonra ~1sn: decoy HER karede (sabit); uçan gerçek top sadece yarı karede (seyrek/gürültülü)
+  for (let i = 1; i <= 25; i++) {
+    const t = contactT + i * dt;
+    const balls = [{ x: decoy.x, y: decoy.y, w: decoy.w }];
+    if (i % 2 === 0) {
+      const p = trueAt(i * dt);
+      // küçük deterministik gürültü (bulanık tespit hissi)
+      balls.push({ x: p.x + ((i * 7) % 5) - 2, y: p.y + ((i * 11) % 5) - 2, w: 19 });
+    }
+    frames.push({ t, balls });
+  }
+  const contactIdx = 13;
+  assert.equal(frames[contactIdx].t, contactT);
+
+  const cands = collectCandidates(frames, contactIdx, 1.2, { contactAnchor: anchor });
+  cands.push({ t: contactT, x: anchor.x, y: anchor.y, w: anchor.w });
+  // Decoy'un hiçbir adayının kalmadığını doğrula (dışlama çalıştı)
+  assert.ok(!cands.some((c) => Math.hypot(c.x - decoy.x, c.y - decoy.y) < decoy.w), 'sabit top adayları RANSAC havuzuna hiç girmemeli');
+
+  const fit = fitFlight(cands, contactT);
+  if (fit) {
+    const atHalf = flightAt(fit, contactT + 0.5);
+    const distToDecoy = Math.hypot(atHalf.x - decoy.x, atHalf.y - decoy.y);
+    const distToTrue = Math.hypot(atHalf.x - trueAt(0.5).x, atHalf.y - trueAt(0.5).y);
+    assert.ok(distToDecoy > 80, `fit sabit topa kilitlenmemeli (decoy'a mesafe ${distToDecoy})`);
+    assert.ok(distToTrue < 20, `fit uçan topun gerçek yörüngesine yakın olmalı (fark ${distToTrue})`);
+  }
+  // fit null da olabilir (veri yetersizse) — ama ASLA decoy'u seçmemeli, üstteki assert'ler bunu garanti eder.
+});
