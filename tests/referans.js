@@ -4,8 +4,8 @@
 // yok): her videonun (tür, ayak, açı) seçimi klasör yolundan gelir (scripts/referans-liste.mjs'in
 // ürettiği tests/referans-liste.json), pipeline'ın kendi suggestion.mode/kick.foot tahmini burada
 // KULLANILMAZ — regresyon.js'in cp-15 notuyla aynı gerekçe.
-import * as pipeline from '../pipeline.js?v=37';
-import { getRuleSet } from '../rules.js?v=37';
+import * as pipeline from '../pipeline.js?v=39';
+import { getRuleSet } from '../rules.js?v=39';
 import { encodeRelPathForFetch, toPipelineParams } from '../scripts/referans-liste.mjs';
 import { groupRows } from '../scripts/referans-ozet.mjs';
 

@@ -57,3 +57,22 @@ Testler: 194/194. Hepsi yerel commit, push yok.
 
 **Sıradaki parti:** iz gecikmesi, kalite kapısını ekranda gösterme + analizi durdurma, iki puan (teknik + sonuç), hız + FIFA tarzı yükleme ekranı, sonra FIFA 14 arayüzü.
 **Senden:** videoları `test-videolar/<tur>/<ayak>/<aci>/<iyi|kotu>_<ad>.mp4` yapısına ayırıp `node scripts/referans-liste.mjs`. Telefon için Artifact: Google model dosyalarını (~30 MB) indirme onayı.
+
+## 2026-09-24 gece: "neden kötü gitti" (kodu Frodo yazdı)
+Ürün tanımı (Mert onayladı): **video gelir → top ne yaptı → postürde neden → nasıl düzelir.**
+
+| Commit | Ne değişti | Doğrulama |
+|---|---|---|
+| adc61fd | Vuran oyuncu = kameraya en yakın (en uzun) kişi; tarama önizlemesi iskelet çizmiyor; "Vuran oyuncuyu seç" dokunuşu | Referans 9: iskelet 4 karede de vuran oyuncuda, kaleciye yok |
+| 6abd14d | "Ölçülemez" kalktı: her açıdan görülen ölçülür (arkadan şut/plase/pas artık analiz ediliyor). Dokunarak seçilen oyuncunun ezilmesi hatası düzeldi | Testler |
+| c9b1dc7 | **Teşhis motoru**: outcome.js (top ne yaptı) + sebep.js (neden-sonuç tablosu, kaynaklı) + rapor başında "Ne oldu / Neden / Nasıl düzelir". Tablo: SEBEP-SONUC.md | Referans 9: "Top yana kıvrıldı, çünkü vuruştan sonra ayağın gövdenin önünden fazla çaprazladı" |
+| fb22a83 | TikTok bitiş ekranı ve sahne kesmesi: vuruş aranmaz, takip kesmeden geçmez | Eşikler 9 referans videosunda ölçüldü (bitiş ekranı 7/7) |
+| ad00854 | Kameradan uzaklaşan topun yüksekliği yandan okunmaz, yanlış "havalandı" demez | Messi klibinde bulundu |
+
+Messi (yandan, şut, sol) hâlâ **100**. Telefon sürümü güncellendi (aynı bağlantı). Testler 229/229.
+
+**Dürüst durum:**
+- Puan eşiklerinin çoğu **[T] tahmin**. Referans 9'daki iyi bir şuta 27/100 verdi; bu, eşiklerin sert olduğunu gösteriyor. Düzeltmenin yolu senin etiketlerin (aşağıda).
+- Arkadan çekimde yükseklik, yandan çekimde sağ-sol okunmuyor (tek kameranın sınırı). Rapor bunu saklamıyor, söylüyor.
+
+**Senden (kısa):** 5-10 videona tek kelimelik etiket: "havalandı", "sağa kaçtı", "güçsüz", "iyiydi". Dosya adına yazman yeter (ör. `havalandi_mert3.mp4`). Uygulamanın topu doğru okuyup okumadığını ve puanın iyiyi kötüden ayırıp ayırmadığını bununla ölçeceğim, eşikleri ona göre ayarlayacağım.

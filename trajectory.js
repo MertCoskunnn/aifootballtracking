@@ -80,6 +80,13 @@ const STATIONARY_LOOKBACK_SEC = 0.5;
 const STATIONARY_CLUSTER_MIN_FRAMES = 2;
 const MIN_START_DISPLACEMENT_SEC = 0.2;
 const MIN_START_DISPLACEMENT_FACTOR = 1.5;
+// [T] Temas dışındaki iz noktalarının en az bu hızda (top çapı/sn) ilerlemesi gerekir (savunma #3).
+// Ölçüm: Messi klibindeki yavaş nesne ~2.5 çap/sn; testteki yay çizen top ~10 çap/sn; yavaş pas ~23.
+const MIN_FLIGHT_DIAM_PER_SEC = 5;
+// [T] Temas → ilk iz noktası hızı, uçuşun erken hızının en fazla bu katı olabilir (hız kopukluğu).
+const MAX_JUMP_RATIO = 5;
+// [T] İzin ilk noktası temastan en geç bu kadar sonra olmalı (saniye).
+const MAX_FIRST_GAP_SEC = 0.2;
 
 function median(nums) {
   const s = [...nums].sort((a, b) => a - b);
@@ -207,12 +214,21 @@ export function fitFlight(points, contactT, opts = {}) {
   const sortedIdx = pts.map((_, i) => i).sort((a, b) => pts[a].tau - pts[b].tau);
   const triples = candidateTriples(sortedIdx, pts);
 
-  let bestInliers = null, bestAvgErr = Infinity;
+  // Tek "en iyi" aday yerine sıralı aday listesi: en çok noktayı tutan aday son kontrollerde (hız,
+  // savunma #2/#3) elenirse sıradakine geçilir. Messi klibinde en kalabalık aday yavaş kayan bir
+  // nesneydi; gerçek uçuş ikinci sıradaydı ve eskiden hiç denenmiyordu.
+  const candidates = [];
+  const seen = new Set();
   for (const [i, j, k] of triples) {
     const taus = [pts[i].tau, pts[j].tau, pts[k].tau];
     const fx = quadFit(taus, [pts[i].x, pts[j].x, pts[k].x]);
     const fy = quadFit(taus, [pts[i].y, pts[j].y, pts[k].y]);
     if (!fx || !fy) continue;
+    // Savunma #3 seçimin içinde: vurulmuş top hızında olmayan aday eğri hiç yarışmaz. Yoksa yavaş
+    // kayan bir nesnenin çok sayıdaki tutarlı noktası, az tespit edilen gerçek uçuşu geride bırakır.
+    const tLo = Math.min(...taus), tHi = Math.max(...taus);
+    const midSpeed = Math.hypot(fx[1] + fx[2] * (tLo + tHi), fy[1] + fy[2] * (tLo + tHi));
+    if (midSpeed < (opts.minFlightRate ?? MIN_FLIGHT_DIAM_PER_SEC) * ballW) continue;
     const inliers = [];
     let sumErr = 0;
     for (let p = 0; p < pts.length; p++) {
@@ -223,13 +239,22 @@ export function fitFlight(points, contactT, opts = {}) {
       if (d <= threshold) { inliers.push(p); sumErr += d; }
     }
     if (inliers.length < 3) continue;
-    const avgErr = sumErr / inliers.length;
-    if (inliers.length > (bestInliers?.length ?? 0) || (inliers.length === bestInliers?.length && avgErr < bestAvgErr)) {
-      bestInliers = inliers; bestAvgErr = avgErr;
-    }
+    const key = inliers.join(',');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    candidates.push({ inliers, avgErr: sumErr / inliers.length });
   }
-  if (!bestInliers || bestInliers.length < 3) return null;
+  candidates.sort((a, b) => (b.inliers.length - a.inliers.length) || (a.avgErr - b.avgErr));
+  for (const c of candidates.slice(0, 20)) {
+    const fit = finalizeFit(c.inliers, pts, anchorIdx, contactT, ballW, opts);
+    if (fit) return fit;
+  }
+  return null;
+}
 
+// Aday bir inlier kümesinden son eğriyi kurar ve fiziksel kontrolleri uygular (sabit top, yavaş
+// nesne). Geçemezse null: fitFlight bir sonraki adaya geçer.
+function finalizeFit(bestInliers, pts, anchorIdx, contactT, ballW, opts) {
   const inlierSet = new Set(bestInliers);
   inlierSet.add(anchorIdx); // temas noktası her zaman içeride
   const idxs = [...inlierSet];
@@ -259,6 +284,52 @@ export function fitFlight(points, contactT, opts = {}) {
   const startDx = fx[1] * minStartSec + fx[2] * minStartSec * minStartSec;
   const startDy = fy[1] * minStartSec + fy[2] * minStartSec * minStartSec;
   if (Math.hypot(startDx, startDy) < minStartFactor * ballW) return null;
+
+  // Savunma #3 (2026-09-24 gece, Messi antrenman klibi): temas noktası DIŞINDAKİ iz noktaları
+  // kendi aralarında vurulmuş bir topun hızıyla ilerlemeli. Gerçek veride RANSAC, kale tarafında
+  // yavaşça kayan bir nesneye (kaleci eldiveni/başı; 0.8 sn'de ~40 px, saniyede ~2.5 top çapı)
+  // kilitlendi; eğri temas noktasından oraya "atlayıp" savunma #2'yi geçti. Vurulmuş top, uzağa
+  // gidip perspektifle kısalsa bile saniyede onlarca top çapı yol alır (yavaş bir pas ~5 m/s ≈ 23
+  // çap/sn). Eşik [T] MIN_FLIGHT_DIAM_PER_SEC.
+  // Uç noktalar arası mesafe yanıltır (yay çizip aynı yüksekliğe dönen top "yavaş" görünür) ve
+  // titreşim yol uzunluğunu şişirir; bu yüzden temas dışı noktalara ayrı bir eğri oturtup o eğrinin
+  // ortalama hızını ölçüyoruz.
+  const flight = idxs.filter((i) => i !== anchorIdx).map((i) => pts[i]).sort((a, b) => a.tau - b.tau);
+  const span = flight.length ? flight[flight.length - 1].tau - flight[0].tau : 0;
+  const minRate = opts.minFlightRate ?? MIN_FLIGHT_DIAM_PER_SEC;
+  // Vurulan top temastan hemen sonra görünür (Messi: 0.13 sn, referans 9: ilk karelerde). İz
+  // temastan çok sonra başlıyorsa temas noktası uzaktaki başka bir nesneye bağlanmış demektir.
+  if (flight.length && flight[0].tau - pts[anchorIdx].tau > (opts.maxFirstGapSec ?? MAX_FIRST_GAP_SEC)) return null;
+  // 2-3 nokta: eğri oturtmak için az, iki uç arası düz hız yeterli.
+  if (flight.length >= 2 && flight.length < 4 && span > 0.05) {
+    const a = flight[0], b = flight[flight.length - 1];
+    if (Math.hypot(b.x - a.x, b.y - a.y) / span < minRate * ballW) return null;
+  }
+  // 4+ nokta: ardışık noktalar arası hızların MEDYANI. Ortalama, iki yavaş küme arasındaki tek bir
+  // sıçramayla şişiyordu (Messi klibinde gerçekten oldu); medyan buna dayanıklı, gerçek uçuşta ise
+  // her adım hızlı. Aynı zamanlı (dt≈0) noktalar atlanır.
+  if (flight.length >= 4 && span > 0.1) {
+    const rates = [];
+    for (let k = 1; k < flight.length; k++) {
+      const dt = flight[k].tau - flight[k - 1].tau;
+      if (dt > 1e-3) rates.push(Math.hypot(flight[k].x - flight[k - 1].x, flight[k].y - flight[k - 1].y) / dt);
+    }
+    // Sadece uçuşun İLK kısmı: kameradan uzaklaşan top (arkadan çekimde hep böyle) perspektif
+    // yüzünden görüntüde giderek yavaşlar; vurulan top ise ilk karelerde her zaman hızlıdır.
+    const early = rates.slice(0, Math.max(3, Math.ceil(rates.length / 3))).sort((a, b) => a - b);
+    const earlyRate = early.length ? early[Math.floor(early.length / 2)] : 0;
+    if (early.length && earlyRate < minRate * ballW) return null;
+    // Hız kopukluğu: temas noktasından ilk iz noktasına "sıçrama" hızı, uçuşun erken hızından çok
+    // büyükse bu bir top değil; eğri temas noktasını uzaktaki yavaş bir nesneye bağlamış (Messi
+    // klibi: sıçrama 1380 px/sn, sonra ~90 px/sn). Gerçek topta ilk adım ile sonrakiler aynı
+    // mertebede (1380 → 650-730). Eşik [T] MAX_JUMP_RATIO.
+    const anchor = pts[anchorIdx];
+    const jumpDt = flight[0].tau - anchor.tau;
+    if (jumpDt > 1e-3 && earlyRate > 0) {
+      const jumpRate = Math.hypot(flight[0].x - anchor.x, flight[0].y - anchor.y) / jumpDt;
+      if (jumpRate > (opts.maxJumpRatio ?? MAX_JUMP_RATIO) * earlyRate) return null;
+    }
+  }
 
   // cp-21-asiri-ekstrapolasyon: temastan hemen sonra top birkaç kare içinde kadraj dışına
   // çıkarsa (ör. çok hızlı şut) gerçek veri penceresi (dataSpan = tEnd-contactT) çok kısa kalabilir

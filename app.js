@@ -12,14 +12,14 @@
 // şeyler: iskeletin oturması (buildTrack), topun bulunması ve temas karesinin bulunması (findKicks) —
 // bunlar hâlâ detect.js/pipeline.js'te. classifyView/suggestMode artık modu/açıyı SEÇMİYOR, sadece
 // "seçtiğin açı ile videonun görünüşü uyuşmuyor" diye yumuşak bir uyarı için kullanılıyor (viewWarning).
-import * as pipeline from './pipeline.js?v=37';
-import { measure, measureFreeKick, buildTrack, bodyLeg } from './metrics.js?v=37';
-import { readOutcome, outcomeProblems, describeOutcome } from './outcome.js?v=37';
-import { diagnose, unexplainedNote, kaynakMetni } from './sebep.js?v=37';
-import { evaluate } from './coach.js?v=37';
-import { fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=37';
-import { getRuleSet } from './rules.js?v=37';
-import { pickTrackedPerson, pickDisplayBall, nearestBallWidth, personAtPoint } from './display.js?v=37';
+import * as pipeline from './pipeline.js?v=39';
+import { measure, measureFreeKick, buildTrack, bodyLeg } from './metrics.js?v=39';
+import { readOutcome, outcomeProblems, describeOutcome } from './outcome.js?v=39';
+import { diagnose, unexplainedNote, kaynakMetni } from './sebep.js?v=39';
+import { evaluate } from './coach.js?v=39';
+import { fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=39';
+import { getRuleSet } from './rules.js?v=39';
+import { pickTrackedPerson, pickDisplayBall, nearestBallWidth, personAtPoint } from './display.js?v=39';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');
@@ -31,6 +31,9 @@ const ctx = canvas.getContext('2d');
 // track: seçilen oyuncunun kare kare tek iskeleti (frames ile aynı uzunlukta).
 // kicks: taramada bulunan tüm vuruşlar, her biri kendi frames penceresini taşır (tekrar oynatılabilsin diye).
 const state = { frames: [], track: null, index: 0, contact: null, ball: null, busy: false, kicks: [], activeKick: null, stopRequested: false, seed: null, pickingPlayer: false };
+
+// Hata ayıklama: tarayıcı konsolundan (ve Frodo'nun doğrulama aracından) durumu okumak için.
+window.__hoca = state;
 
 function setStatus(t) { $('status').textContent = t; }
 

@@ -249,3 +249,26 @@ test('fitFlight+flightTrail: az veriyle (kısa dataSpan) desteklenen eğri artı
   const oldLag = Math.hypot(oldPos.x - truePos.x, oldPos.y - truePos.y);
   assert.ok(newLag <= oldLag + 1e-6, `yeni tavan eski sabit tavandan daha az (ya da eşit) sapmalı (yeni ${newLag.toFixed(1)}px, eski ${oldLag.toFixed(1)}px)`);
 });
+
+test('fitFlight: temastan yavaş kayan bir nesneye (kaleci eldiveni) "atlayan" iz reddedilir', () => {
+  // Gerçek Messi verisinden: temas (497,502), sonra ~0.8 sn boyunca (369,356)→(407,389) yavaş kayma, w≈20
+  const pts = [{ t: 6.1, x: 497, y: 502, w: 20 }];
+  const slow = [[6.13, 369, 356], [6.17, 372, 355], [6.2, 372, 355], [6.23, 371, 355], [6.27, 374, 354], [6.3, 375, 356],
+    [6.4, 378, 355], [6.47, 379, 355], [6.5, 381, 356], [6.57, 381, 358], [6.8, 401, 387], [6.9, 407, 389]];
+  for (const [t, x, y] of slow) pts.push({ t, x, y, w: 20 });
+  assert.equal(fitFlight(pts, 6.1), null);
+});
+
+test('fitFlight: gerçekten uçan top (saniyede onlarca çap) kabul edilir', () => {
+  const pts = [];
+  for (let i = 0; i <= 12; i++) { const t = i / 30; pts.push({ t, x: 100 + 600 * t, y: 400 - 300 * t + 250 * t * t, w: 20 }); }
+  assert.ok(fitFlight(pts, 0));
+});
+
+test('fitFlight: kameradan uzaklaşan (perspektifle yavaşlayan) gerçek uçuş reddedilmez', () => {
+  // Arkadan çekim gibi: top başta hızlı, sonra görüntüde giderek yavaşlıyor
+  const pts = [{ t: 0, x: 240, y: 700, w: 16 }];
+  const ys = [640, 590, 552, 522, 500, 484, 472, 463, 457, 452];
+  ys.forEach((y, i) => pts.push({ t: (i + 1) / 30, x: 240 + (i + 1) * 3, y, w: 16 - i * 0.6 }));
+  assert.ok(fitFlight(pts, 0), 'gerçek uçuş kabul edilmeli');
+});
