@@ -11,6 +11,7 @@
 | cp-12-movenet | İkinci göz. Arkadan çekilen oyuncunun iskeleti artık çıkıyor (Liverpool frikiğinde 10 numaralı Messi). Sadece gerektiğinde ve topun yanındaki kişide devreye giriyor. |
 | cp-13-vurus-turleri | Yeni mod: **Plase**. **Hareketli top** kendiliğinden anlaşılıyor, ona göre kural gevşiyor. **Her kurala tek başına yapılabilecek bir alıştırma** eklendi, raporda "Odaklan" altında. |
 | cp-14a-olcum-yeterliligi | Kötü açıdan çekilen videoya sahte puan verilmiyor. Hoca "ölçüm yetersiz, şu açıdan çek" diyor. |
+| cp-14c-makul-aralik | İskelet yanlış okununca çıkan imkânsız değerler (destek dizi 117°) elenir, hoca saçma öneri vermez. |
 
 ## Neyi neden yaptım (yeni başlayana anlatır gibi)
 - **Önce kontrol düzeneği.** Bir binaya kat çıkmadan önce terazi kurmak gibi. Her yeni özellik eski sonuçları bozabilir. Kontrol sayfası olmasaydı her seferinde elle deneyecektik, gece boyu 5 checkpoint mümkün olmazdı.
