@@ -3,7 +3,7 @@
 // olmuş olabilir" diye birkaç aday an işaretler; sadece o anların etrafı sonra 30 fps'te yoğun
 // işlenir (bkz. app.js). Bu dosya sadece aday pencereleri hesaplayan saf mantığı içerir.
 // Saf fonksiyon: DOM'a ve MediaPipe'a bağlı değil, Node ile test edilir.
-import { trackBalls } from './detect.js?v=32';
+import { trackBalls } from './detect.js?v=34';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 

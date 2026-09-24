@@ -1,7 +1,7 @@
 // Ölçüm katmanı ("cetvel"): iskelet noktalarından açı ve mesafe hesaplar.
 // Saf fonksiyonlar, tarayıcıya ve MediaPipe'a bağımlı değil, test edilebilir.
 // Koordinatlar piksel cinsinden, y aşağı doğru artar.
-import { findPhases } from './phases.js?v=32';
+import { findPhases } from './phases.js?v=34';
 
 // MediaPipe Pose nokta numaraları
 export const LM = {
@@ -110,6 +110,9 @@ const hipFlexion = (p, side) =>
 // Bacak boyu (kalça → diz → ayak bileği), mesafeleri kişiden bağımsız yapmak için
 const legLength = (p, side) =>
   dist(p[LM.hip[side]], p[LM.knee[side]]) + dist(p[LM.knee[side]], p[LM.ankle[side]]);
+
+/** İki bacaktan uzun olanın boyu (piksel). Topun hızını "bacak boyu/sn" ile ölçmek için (outcome.js). */
+export const bodyLeg = (p) => Math.max(legLength(p, 'left'), legLength(p, 'right'));
 
 // Gövdenin dikeyle açısı. Pozitif = hareket yönüne (öne) eğik, negatif = geriye yaslanmış.
 function trunkLean(p, dir) {

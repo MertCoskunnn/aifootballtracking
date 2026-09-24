@@ -6,9 +6,9 @@
 // kendisine verilen `video` elemanını (ve vision.js'i) kullanır — bir <video id="..."> arar gibi
 // document'a gitmez. Saf kısımlar (collectKicks, analyzeKick, eşleştirme/tolerans) analysis.js'te:
 // vision.js Node'da import edilemediği için (CDN URL'i), o dosya Node testlerinde kullanılabiliyor.
-import { processRange, setMoveNetEnabled, getVisionStats } from './vision.js?v=32';
-import { candidateWindows } from './scan.js?v=32';
-import { collectKicks, analyzeKick } from './analysis.js?v=32';
+import { processRange, setMoveNetEnabled, getVisionStats } from './vision.js?v=34';
+import { candidateWindows } from './scan.js?v=34';
+import { collectKicks, analyzeKick } from './analysis.js?v=34';
 
 export { collectKicks, analyzeKick };
 // cp-12-movenet: vision.js'in MoveNet açma/kapama ve istatistik uçları, app.js ve regresyon

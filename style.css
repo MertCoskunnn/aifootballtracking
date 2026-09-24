@@ -56,6 +56,11 @@ button.primary { background: var(--pitch); color: #04140b; border: none; font-we
 .bar i.low { background: var(--bad); }
 .coach { background: #0f1713; border-left: 3px solid var(--pitch); padding: 10px 14px; border-radius: 6px; margin: 12px 0; }
 .warn { color: var(--warn); font-size: .9rem; }
+.diagnosis { background: #0f1713; border: 1px solid #1f2d25; padding: 10px 14px; border-radius: 6px; margin: 12px 0; }
+.diagnosis p { margin: 6px 0; }
+.diagnosis ul { margin: 4px 0 8px; padding-left: 18px; }
+.diagnosis li { margin: 6px 0; }
+.diagnosis small.hint { font-size: .78rem; }
 
 button.stop { background: var(--bad); color: #2a0a0a; border: none; font-weight: 700; margin: 10px 0; }
 

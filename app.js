@@ -12,12 +12,14 @@
 // şeyler: iskeletin oturması (buildTrack), topun bulunması ve temas karesinin bulunması (findKicks) —
 // bunlar hâlâ detect.js/pipeline.js'te. classifyView/suggestMode artık modu/açıyı SEÇMİYOR, sadece
 // "seçtiğin açı ile videonun görünüşü uyuşmuyor" diye yumuşak bir uyarı için kullanılıyor (viewWarning).
-import * as pipeline from './pipeline.js?v=32';
-import { measure, measureFreeKick, buildTrack } from './metrics.js?v=32';
-import { evaluate } from './coach.js?v=32';
-import { fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=32';
-import { getRuleSet } from './rules.js?v=32';
-import { pickTrackedPerson, pickDisplayBall, nearestBallWidth, personAtPoint } from './display.js?v=32';
+import * as pipeline from './pipeline.js?v=34';
+import { measure, measureFreeKick, buildTrack, bodyLeg } from './metrics.js?v=34';
+import { readOutcome, outcomeProblems, describeOutcome } from './outcome.js?v=34';
+import { diagnose, unexplainedNote, kaynakMetni } from './sebep.js?v=34';
+import { evaluate } from './coach.js?v=34';
+import { fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=34';
+import { getRuleSet } from './rules.js?v=34';
+import { pickTrackedPerson, pickDisplayBall, nearestBallWidth, personAtPoint } from './display.js?v=34';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');
@@ -607,7 +609,14 @@ function runAnalysis() {
       res = evaluate(m, mode, null, ruleSet.kurallar);
     }
     if (state.activeKick) { state.activeKick.score = res.total; renderKickList(); }
-    renderReport(res, mode, foot, ruleSet, viewWarning(angle));
+    // Ürün tanımı (2026-09-24 gece): top ne yaptı → hangi postür hatası bunu açıklıyor → nasıl düzelir.
+    ensureFlight();
+    const kicker = state.track?.[state.contact];
+    const outcome = readOutcome(state.fit, angle, kicker ? bodyLeg(kicker) : 0);
+    const diag = diagnose(res.items, outcomeProblems(outcome, mode), mode);
+    // viewWarning (videodan açı tahmini) artık gösterilmiyor: kendi notu "güvenilmez" diyordu ve
+    // referans 9'da arkadan çekimi "yandan" sandı. Güvenilmez bilgiyi göstermek gürültü.
+    renderReport(res, mode, foot, ruleSet, null, { outcome, diag, angle });
   } catch (err) { setStatus(err.message); }
 }
 
@@ -622,7 +631,22 @@ function renderUnmeasurable(ruleSet, mode) {
   el.scrollIntoView({ behavior: 'smooth' });
 }
 
-function renderReport(res, mode, foot, ruleSet, warning) {
+// Teşhis bloğu: raporun en üstünde. Ne oldu (topun sonucu) → Neden (en fazla 2 postür hatası,
+// top gözlendiyse "çünkü" ile bağlı) → Nasıl düzelir (ilk nedenin alıştırması).
+function diagnosisHtml({ outcome, diag, angle }) {
+  const ne = describeOutcome(outcome) ?? 'Topun uçuşu bu videoda okunamadı; aşağıdaki hatalar postürden.';
+  const neden = diag.bulgular.map((b) => `<li>${b.cumle}<br><small class="hint">${kaynakMetni(b.kaynak)}</small></li>`).join('');
+  const aciklanamayan = diag.aciklanamayan.map((l) => `<li>${unexplainedNote(l, angle)}</li>`).join('');
+  const ilk = diag.bulgular[0];
+  return `
+    <div class="diagnosis">
+      <p><b>Ne oldu:</b> ${ne}</p>
+      ${neden || aciklanamayan ? `<p><b>Neden:</b></p><ul>${neden}${aciklanamayan}</ul>` : '<p><b>Neden:</b> Postürde belirgin bir hata görmedim.</p>'}
+      ${ilk?.drill ? `<p><b>Nasıl düzelir:</b> ${ilk.tip ?? ''}<br><span class="hint">Alıştırma: ${ilk.drill}</span></p>` : ''}
+    </div>`;
+}
+
+function renderReport(res, mode, foot, ruleSet, warning, teshis) {
   const el = $('report');
   const band = (s) => (s >= 80 ? '' : s >= 50 ? 'mid' : 'low');
   const p = state.track[state.contact];
@@ -641,8 +665,9 @@ function renderReport(res, mode, foot, ruleSet, warning) {
   el.innerHTML = `
     <h2>${MODE_TITLE[mode] ?? 'Pas'} raporu</h2>
     ${refLine}
+    ${teshis ? diagnosisHtml(teshis) : ''}
     <div class="score"><span class="big">${res.insufficient ? '—' : res.total}</span>${res.insufficient ? '' : '<span>/ 100</span>'}</div>
-    <div class="coach">${res.verdict}${res.focus.length ? '<br><br><b>Odaklan:</b><br>' + res.focus.map((f) => `${f.tip}${f.drill ? `<br><span class="hint">Alıştırma: ${f.drill}</span>` : ''}`).join('<br><br>') : ''}</div>
+    <div class="coach">${res.verdict}${!teshis && res.focus.length ? '<br><br><b>Odaklan:</b><br>' + res.focus.map((f) => `${f.tip}${f.drill ? `<br><span class="hint">Alıştırma: ${f.drill}</span>` : ''}`).join('<br><br>') : ''}</div>
     ${warning ? `<p class="warn">${warning}</p>` : ''}
     ${res.movingBall ? '<p class="hint">Top hareketliydi: hareketli topa vuruş kuralları uygulandı.</p>' : ''}
     ${lowVis ? '<p class="warn">Temas karesinde bacak noktalarının bazıları net görünmüyor. Sonuç yanıltıcı olabilir.</p>' : ''}
