@@ -218,3 +218,56 @@ test('classifyView: oyuncu 0.6 kat küçülürse (kameradan uzaklaşıyor) arkad
   const view = classifyView(frames, { contact, person: 0, flight: { seen: 0 } }, FPS);
   assert.equal(view.view, 'behind', `view ${JSON.stringify(view)}`);
 });
+
+// (h) Bulut-iskeleti gerilemesi (2026-09-24): MoveNet yedeği topun yanındaki BAŞKA bir kişiyi de
+// iskelet olarak from karesine ekleyebiliyor (ör. antrenman videosundaki ikinci top/oyuncu). Eski
+// tek atlamalı eşleşme (from karesinde doğrudan b'nin kalçasına en yakın kişiyi ara) bu hayalet
+// kişiyi "aynı oyuncu" sanıp yanlış sınıflandırma üretiyordu. Gerçek oyuncu koşarken her karede
+// izleniyorsa (kare kare zincir), hayalet sadece from karesinde belirse bile zincir gerçek oyuncuyu
+// bırakmamalı: hayalet b'nin kalçasına (uzak gelecek konumu) çok yakın olsa da, gerçek oyuncunun
+// komşu karedeki konumuna hayalet'ten çok daha yakındır.
+test('classifyView: from karesinde b\'ye yakın hayalet kişi olsa da zincir gerçek (koşan) oyuncuyu izler', () => {
+  const contact = 30;
+  const n = Math.max(3, Math.round(0.7 * FPS)); // 21
+  const from = contact - n; // 9
+  const legLen = 100;
+  const startX = 1000, endX = 1200; // gerçek oyuncu 2 bacak boyu yatay koşuyor (yandan)
+  const frames = [];
+  for (let i = 0; i < from; i++) frames.push({ t: i / FPS, people: [] });
+  for (let i = from; i <= contact; i++) {
+    const hipX = startX + ((endX - startX) * (i - from)) / (contact - from);
+    const people = [poseAt({ hipX, legLen })];
+    if (i === from) {
+      // Hayalet: b'nin (temas karesindeki) kalçasına neredeyse yapışık, ama gerçek oyuncunun
+      // from karesindeki asıl konumundan (1000) çok uzak. Boy oranı gerçek oyuncuyla aynı (100),
+      // yani sadece konum tuzağı test ediliyor — büyüklük eşiği burada devrede değil.
+      people.push(poseAt({ hipX: endX - 5, legLen }));
+    }
+    frames.push({ t: i / FPS, people });
+  }
+  const view = classifyView(frames, { contact, person: 0, flight: { seen: 0 } }, FPS);
+  assert.equal(view.view, 'side', `hayalet kişi yüzünden yanlış sınıflandı: ${JSON.stringify(view)}`);
+});
+
+// (i) Bacak boyu oranı 0.5-2 dışına çıkan bir eşleşme (boyca alakasız, muhtemelen hayalet iskelet
+// ya da yanlış kırpıntıdan çıkan bozuk bir tespit) reddedilmeli, zincir o kareyi atlayıp devam
+// etmeli. Burada gerçek oyuncu SADECE from ve contact karelerinde var (ara kareler boş, ilk testteki
+// gibi); from karesine ek olarak boyca çok küçük (legLen 20) bir "kişi" daha eklendi, konumu gerçek
+// oyuncudan biraz daha yakın olacak şekilde b'ye yerleştirildi. Oran testi onu elemeli.
+test('classifyView: boyca alakasız (oran 0.5-2 dışı) yakın bir kişi reddedilir, gerçek oyuncu kullanılır', () => {
+  const contact = 30;
+  const n = Math.max(3, Math.round(0.7 * FPS));
+  const legLen = 100;
+  const frames = [];
+  for (let i = 0; i <= contact; i++) frames.push({ t: i / FPS, people: [] });
+  frames[contact - n] = {
+    t: (contact - n) / FPS,
+    people: [
+      poseAt({ hipX: 1000 + 2 * legLen, legLen: 20 }), // boyca alakasız (oran 0.2), b'ye çok yakın
+      poseAt({ hipX: 1000, legLen }), // gerçek oyuncu
+    ],
+  };
+  frames[contact] = { t: contact / FPS, people: [poseAt({ hipX: 1000 + 2 * legLen, legLen })] };
+  const view = classifyView(frames, { contact, person: 0, flight: { seen: 0 } }, FPS);
+  assert.equal(view.view, 'side', `boyca alakasız kişi yüzünden yanlış sınıflandı: ${JSON.stringify(view)}`);
+});

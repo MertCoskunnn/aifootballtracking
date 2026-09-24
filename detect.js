@@ -250,21 +250,45 @@ function flightOf(ball, onset, rest) {
  *   - Oyuncu belirgin küçüldüyse (kameradan uzaklaşıyor) → arkadan, büyüdüyse → önden
  * Yedek kanıt (koşu belirsizse): topun uçuşu (küçülerek uzaklaştı → arkadan, vb.)
  * Dönen: { view, confidence (0-1), reason, shot } (shot: topun uçuşunun kısa açıklaması)
+ *
+ * Bulut-iskeleti gerilemesi (2026-09-24): "a" kişisi eskiden TEK atlamayla, doğrudan temas
+ * karesindeki kalçaya (b) en yakın kalçalı kişi aranarak from karesinde bulunuyordu. MoveNet
+ * yedeği (cp-12-movenet) sahneye topun yanındaki BAŞKA kişileri de iskelet olarak eklemeye
+ * başlayınca (ör. antrenman videosunda ikinci top/oyuncu), bu tek atlama uzaktaki alakasız bir
+ * kişiyi "aynı oyuncu" sanabildi: 0.7 sn'lik boşlukta gerçek oyuncu koşarken kalçası uzağa
+ * gitmiş olabilir, oysa duran bir yabancı kalça o an b'ye tesadüfen daha yakın kalabilir. Düzeltme:
+ * temastan from'a doğru KARE KARE (yalnızca kişi içeren karelerde) bir önceki adımın kalçasına en
+ * yakın kişiyi izle — komşu kareler arası kayma küçük olduğu için gerçek oyuncu neredeyse hep en
+ * yakın kişi olur. Ayrıca bacak boyu oranı 0.5-2 dışına çıkan bir eşleşme (boyca alakasız,
+ * muhtemelen hayalet iskelet) reddedilir.
  */
 export function classifyView(frames, kick, fps) {
   const shot = describeFlight(kick.flight);
   // Temastan ~0.7 sn öncesine bak. Kısa bir pencere işlendiyse eldeki en eski kareyi kullan (en az 0.25 sn)
   const from = Math.max(0, kick.contact - Math.round(0.7 * fps));
   const b = frames[kick.contact]?.people?.[kick.person];
-  const a = kick.contact - from >= Math.round(0.25 * fps) && b
-    ? frames[from]?.people?.reduce((x, q) => (dist(q[23], b[23]) < dist(x[23], b[23]) ? q : x), frames[from].people[0])
-    : null;
+  // Bacak boyu = kalça→diz + diz→bilek (büküşten etkilenmez), iki bacağın büyüğü.
+  // Kalçadan bileğe düz mesafe kullanılınca kurulan bacak "kısaldı", oyuncu uzaklaşıyor sanıldı.
+  const seg = (p, h, k, an) => dist(p[h], p[k]) + dist(p[k], p[an]);
+  const leg = (p) => Math.max(seg(p, 23, 25, 27), seg(p, 24, 26, 28));
+  const hip = (p) => ({ x: (p[23].x + p[24].x) / 2, y: (p[23].y + p[24].y) / 2 });
+  let a = null;
+  if (b && kick.contact - from >= Math.round(0.25 * fps)) {
+    let cur = b, curLeg = leg(b);
+    for (let f = kick.contact - 1; f >= from; f--) {
+      const people = frames[f]?.people;
+      if (!people?.length) continue; // bu karede kimse yok: bir sonraki (daha eski) kareye bak
+      // Boyca alakasız adaylar (muhtemelen hayalet iskelet) önce elenir, sonra kalanlardan en
+      // yakını seçilir: yakın ama yanlış boydaki biri, uzaktaki gerçek (doğru boydaki) oyuncuyu
+      // maskelemesin.
+      const plausible = people.filter((q) => { const r = leg(q) / curLeg; return r >= 0.5 && r <= 2; });
+      if (!plausible.length) continue;
+      const cand = plausible.reduce((x, q) => (dist(q[23], cur[23]) < dist(x[23], cur[23]) ? q : x), plausible[0]);
+      cur = cand; curLeg = leg(cand);
+      a = cand;
+    }
+  }
   if (a && b) {
-    // Bacak boyu = kalça→diz + diz→bilek (büküşten etkilenmez), iki bacağın büyüğü.
-    // Kalçadan bileğe düz mesafe kullanılınca kurulan bacak "kısaldı", oyuncu uzaklaşıyor sanıldı.
-    const seg = (p, h, k, an) => dist(p[h], p[k]) + dist(p[k], p[an]);
-    const leg = (p) => Math.max(seg(p, 23, 25, 27), seg(p, 24, 26, 28));
-    const hip = (p) => ({ x: (p[23].x + p[24].x) / 2, y: (p[23].y + p[24].y) / 2 });
     const across = Math.abs(hip(b).x - hip(a).x) / Math.max(leg(a), leg(b));
     const grow = leg(b) / leg(a);
     if (across > 0.5 && grow > 0.75 && grow < 1.33) {
