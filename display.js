@@ -19,7 +19,7 @@
 // sabit-top durumunu, eski yol hiç süzmeden alıyordu). Artık kural net: temas SONRASI nişangah
 // YALNIZ geçerli bir fit'ten gelir; fit yoksa (RANSAC yetersiz/güvenilmez veri yüzünden kuramadıysa
 // ya da sabit-top şüphesiyle reddettiyse) hiçbir top gösterilmez — "belirsiz ama yanlış" yerine "yok".
-import { flightAt } from './trajectory.js?v=31';
+import { flightAt } from './trajectory.js?v=32';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const FEET = [27, 28, 31, 32]; // ayak bileği (sol/sağ), ayak ucu (sol/sağ)
@@ -99,6 +99,24 @@ export function nearestBallWidth(frame, point, maxDist = Infinity) {
   const nearest = cands.reduce((a, b) => (dist(b, point) < dist(a, point) ? b : a));
   if (dist(nearest, point) > maxDist) return null;
   return nearest.w;
+}
+
+/**
+ * Dokunulan noktadaki kişiyi seçer (kullanıcı "vuran oyuncu bu" diye dokunduğunda).
+ * people: o karedeki iskeletler. pt: dokunulan nokta {x,y} (canvas pikseli).
+ * Kural: iskeletin noktalarından dokunuşa en yakın olanı seç; ama en yakın nokta, o kişinin
+ * boyunun yarısından uzaktaysa (boş zemine dokunulduysa) kimseyi seçme.
+ * Dönen: iskelet ya da null.
+ */
+export function personAtPoint(people, pt) {
+  let best = null, bestD = Infinity;
+  for (const p of people || []) {
+    const ys = p.map((q) => q.y);
+    const height = Math.max(...ys) - Math.min(...ys) || 1;
+    const d = Math.min(...p.map((q) => dist(q, pt))) / height;
+    if (d < bestD) { bestD = d; best = p; }
+  }
+  return bestD <= 0.5 ? best : null;
 }
 
 /**

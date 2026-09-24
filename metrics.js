@@ -1,7 +1,7 @@
 // Ölçüm katmanı ("cetvel"): iskelet noktalarından açı ve mesafe hesaplar.
 // Saf fonksiyonlar, tarayıcıya ve MediaPipe'a bağımlı değil, test edilebilir.
 // Koordinatlar piksel cinsinden, y aşağı doğru artar.
-import { findPhases } from './phases.js?v=31';
+import { findPhases } from './phases.js?v=32';
 
 // MediaPipe Pose nokta numaraları
 export const LM = {
@@ -141,16 +141,35 @@ const sliceFrames = (frames, from, to) =>
   frames.slice(Math.max(0, from), Math.min(frames.length, to + 1)).filter(Boolean);
 
 /**
+ * Vuran oyuncu = kameraya en yakın kişi (ekranda en büyük görünen). Mert'in kuralı (2026-09-24):
+ * tripodla çekilen idman videosunda vuran hep ön plandadır; kaleci ve arkadakiler uzakta, küçük.
+ * "Ayağı topa en yakın" kuralı yerde birden çok top olunca ya da top başka birinin yanında
+ * kalınca yanlış kişiyi seçiyordu. Mert'in kararı: topa hiç bakılmaz, doğrudan en büyük görünen
+ * kişi seçilir. Boy = iskeletin dikey uzunluğu (piksel). Bu kuralın bozulduğu çekimler (kalecinin
+ * arkasından maç görüntüsü, kameranın dibinden geçen biri) için "Vuran oyuncuyu seç" dokunuşu var.
+ */
+export function personHeight(p) {
+  const ys = p.map((q) => q.y);
+  return Math.max(...ys) - Math.min(...ys);
+}
+
+export function pickKicker(people) {
+  if (!people.length) return null;
+  return people.reduce((a, b) => (personHeight(b) > personHeight(a) ? b : a));
+}
+
+/**
  * Oyuncuyu seç ve takip et. Kadrajda birden fazla kişi olabilir.
- * Temas karesinde ayağı topa en yakın kişi oyuncudur. Sonra ileri ve geri
+ * Temas karesinde kameraya en yakın kişi oyuncudur (pickKicker). Sonra ileri ve geri
  * her karede, bir önceki karedeki kalçasına en yakın kişiyi seçeriz.
  * frames: her kare için kişi listesi (her kişi 33 nokta). Dönen: kare başına tek iskelet ya da null.
+ * ball: artık oyuncu seçiminde kullanılmıyor, imza geriye uyumluluk için duruyor.
+ * seed (isteğe bağlı): kullanıcının temas karesinde dokunarak seçtiği iskelet. Verilirse
+ * otomatik seçim atlanır, takip doğrudan bu kişiden başlar.
  */
-export function buildTrack(frames, contact, ball) {
-  const pick = (people, fn) => people.reduce((best, p) => (best === null || fn(p) < fn(best) ? p : best), null);
+export function buildTrack(frames, contact, ball, seed = null) {
   const track = new Array(frames.length).fill(null);
-  const feet = (p) => Math.min(...[27, 28, 31, 32].map((i) => d2(p[i], ball)));
-  const start = pick(frames[contact] || [], feet);
+  const start = seed || pickKicker(frames[contact] || []);
   if (!start) return track;
   track[contact] = start;
   // Kalabalık/arkadan çekimde (Messi–Liverpool yayını) sadece "kalçaya en yakın" seçimi, oyuncu

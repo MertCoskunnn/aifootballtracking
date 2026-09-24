@@ -121,9 +121,10 @@ test('buildTrack: oyuncuyu takip eder, hareketsiz izleyiciyi görmezden gelir', 
   for (let i = 0; i < total; i++) {
     const hipX = kickerHipX0 + (i - contact) * step;
     const kicker = buildPose({ hipX, dir: 1, side: 'right' });
-    const bystander = buildPose({ hipX: bystanderHipX, dir: 1, side: 'right' });
+    // Kameradan uzak izleyici: %60 boyunda (kural: vuran = kameraya en yakın = en büyük görünen)
+    const bystander = buildPose({ hipX: bystanderHipX, dir: 1, side: 'right' }).map((q) => ({ ...q, y: 400 + (q.y - 400) * 0.6 }));
     kickerPoses.push(kicker);
-    frames.push([bystander, kicker]); // sıra önemsiz, buildTrack topa yakınlığa bakar
+    frames.push([bystander, kicker]); // sıra önemsiz, buildTrack boya bakar
   }
   const contactPose = kickerPoses[contact];
   const ball = { x: contactPose[LM.ankle.left].x, y: contactPose[LM.ankle.left].y };
@@ -302,8 +303,18 @@ test('buildTrack: kısa kayıpta boyu farklı yakındaki kişiye atlamaz, oyuncu
   }
   const contact = 3;
   const p = frames[contact][0];
-  const tr = buildTrack(frames, contact, { x: p[LM.toe.right].x, y: p[LM.toe.right].y });
+  // Büyük kişi kameraya daha yakın; otomatik kural onu seçerdi. Bu test takibin boyu farklı birine
+  // ATLAMADIĞINI ölçüyor, o yüzden oyuncu kullanıcı dokunuşuyla seçilmiş (seed) gibi veriliyor.
+  const tr = buildTrack(frames, contact, { x: p[LM.toe.right].x, y: p[LM.toe.right].y }, p);
   assert.equal(tr[6], null, '6. karede büyük kişiye atlamamalı');
   assert.equal(tr[7], null, '7. karede büyük kişiye atlamamalı');
   assert.equal(tr[9], frames[9][0], 'oyuncu geri gelince takip ona devam etmeli');
+});
+
+test('pickKicker: kameraya en yakın (en uzun görünen) kişiyi seçer, topa bakmaz', async () => {
+  const { pickKicker } = await import('../metrics.js');
+  const near = buildPose({ hipX: 600, dir: 1, side: 'right' });
+  const keeper = buildPose({ hipX: 900, dir: 1, side: 'right' }).map((q) => ({ ...q, y: 300 + (q.y - 300) * 0.4 }));
+  assert.equal(pickKicker([keeper, near]), near);
+  assert.equal(pickKicker([]), null);
 });

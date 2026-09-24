@@ -197,3 +197,12 @@ test('pickLiveDisplay: top var ama kimse yoksa person null, ball dolu döner', (
   assert.equal(res.person, null);
   assert.ok(res.ball);
 });
+
+test('personAtPoint: dokunulan kişiyi seçer, boş zemine dokunulursa null', async () => {
+  const { personAtPoint } = await import('../display.js');
+  const man = (x0) => [{ x: x0, y: 100 }, { x: x0, y: 300 }, { x: x0 + 20, y: 200 }];
+  const a = man(100), b = man(500);
+  assert.equal(personAtPoint([a, b], { x: 110, y: 210 }), a);
+  assert.equal(personAtPoint([a, b], { x: 505, y: 150 }), b);
+  assert.equal(personAtPoint([a, b], { x: 300, y: 600 }), null);
+});

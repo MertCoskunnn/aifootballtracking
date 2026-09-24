@@ -12,12 +12,12 @@
 // şeyler: iskeletin oturması (buildTrack), topun bulunması ve temas karesinin bulunması (findKicks) —
 // bunlar hâlâ detect.js/pipeline.js'te. classifyView/suggestMode artık modu/açıyı SEÇMİYOR, sadece
 // "seçtiğin açı ile videonun görünüşü uyuşmuyor" diye yumuşak bir uyarı için kullanılıyor (viewWarning).
-import * as pipeline from './pipeline.js?v=31';
-import { measure, measureFreeKick, buildTrack } from './metrics.js?v=31';
-import { evaluate } from './coach.js?v=31';
-import { fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=31';
-import { getRuleSet } from './rules.js?v=31';
-import { pickTrackedPerson, pickDisplayBall, pickLiveDisplay, nearestBallWidth } from './display.js?v=31';
+import * as pipeline from './pipeline.js?v=32';
+import { measure, measureFreeKick, buildTrack } from './metrics.js?v=32';
+import { evaluate } from './coach.js?v=32';
+import { fitFlight, flightPath, flightTrail, collectCandidates } from './trajectory.js?v=32';
+import { getRuleSet } from './rules.js?v=32';
+import { pickTrackedPerson, pickDisplayBall, nearestBallWidth, personAtPoint } from './display.js?v=32';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');
@@ -28,7 +28,7 @@ const ctx = canvas.getContext('2d');
 // (bir vuruşun kendi penceresi, ya da elle-düzelt için ilk birkaç saniye).
 // track: seçilen oyuncunun kare kare tek iskeleti (frames ile aynı uzunlukta).
 // kicks: taramada bulunan tüm vuruşlar, her biri kendi frames penceresini taşır (tekrar oynatılabilsin diye).
-const state = { frames: [], track: null, index: 0, contact: null, ball: null, busy: false, kicks: [], activeKick: null, stopRequested: false };
+const state = { frames: [], track: null, index: 0, contact: null, ball: null, busy: false, kicks: [], activeKick: null, stopRequested: false, seed: null, pickingPlayer: false };
 
 function setStatus(t) { $('status').textContent = t; }
 
@@ -81,12 +81,12 @@ function runPass(t0, t1, fps, label) {
 // display.js). Kesin değildir (vuruş henüz bulunmadı), sadece "bir şey oluyor" geri bildirimi;
 // tarama ekranı zaten ileride bir yükleme ekranıyla değişecek, bu yüzden burada fazla
 // mühendislik yapılmadı — tek kişi/tek top bulunamazsa (frame boşsa) hiçbir şey çizilmez.
-function drawLive(frame) {
+// 2026-09-24 akşam: tarama sırasında artık hiç iskelet/top çizilmiyor. Vuruş henüz bulunmadığı
+// için "topa en yakın kişi" tahmini sık sık kaleciye ya da arkadaki birine oturuyordu ve Mert
+// bunu hata olarak görüyordu (haklı olarak: yanlış bilgi göstermek, hiç göstermemekten kötü).
+// Tarama ekranı sadece ilerlemeyi gösterir; iskelet, vuruş bulunup oyuncu belli olunca çizilir.
+function drawLive() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const s = canvas.width / 400;
-  const { person, ball } = pickLiveDisplay(frame);
-  if (person) drawPose(person, s, true);
-  if (ball) drawBallMarker(ball, s, false);
 }
 
 // cp-17-nisangah: topu saran işaret artık oyunlardaki crosshair gibi ince bir nişangah — topun
@@ -214,6 +214,8 @@ function loadFrames(frames, kick) {
   state.track = null;
   state.contact = null;
   state.ball = null;
+  state.seed = null;
+  state.pickingPlayer = false;
   state.activeKick = kick;
   $('scrub').max = Math.max(0, frames.length - 1);
   $('stageWrap').hidden = false;
@@ -495,9 +497,20 @@ $('markContact').addEventListener('click', () => {
   state.contact = state.index;
   state.ball = null;
   state.track = null;
+  state.seed = null;
+  state.pickingPlayer = false;
   state.activeKick = null;
   setStatus(`Temas karesi: ${state.index + 1}. Şimdi topun üstüne tıkla.`);
   draw(); updateReady();
+});
+
+// Vuran oyuncuyu dokunarak seç: bir sonraki tıklama top değil oyuncu seçer.
+$('pickPlayer').addEventListener('click', () => {
+  if (state.contact === null || !state.ball) { setStatus('Önce bir vuruş aç ya da temas karesini ve topu işaretle.'); return; }
+  video.pause();
+  state.pickingPlayer = true;
+  if (state.index !== state.contact) show(state.contact);
+  setStatus('Temas karesindesin. Vuruşu yapan oyuncuya dokun.');
 });
 
 canvas.addEventListener('click', (e) => {
@@ -506,11 +519,22 @@ canvas.addEventListener('click', (e) => {
   if (state.index !== state.contact) show(state.contact);
   const r = canvas.getBoundingClientRect();
   if (!r.width || !r.height) return; // görünmeyen tuvalde tıklama konumu hesaplanamaz
-  state.ball = {
+  const pt = {
     x: ((e.clientX - r.left) / r.width) * canvas.width,
     y: ((e.clientY - r.top) / r.height) * canvas.height,
   };
-  state.track = buildTrack(state.frames.map((f) => f.people), state.contact, state.ball);
+  if (state.pickingPlayer) {
+    const seed = personAtPoint(state.frames[state.contact]?.people, pt);
+    if (!seed) { setStatus('Dokunduğun yerde kimse bulunamadı. Oyuncunun gövdesine dokun.'); return; }
+    state.pickingPlayer = false;
+    state.seed = seed;
+    state.track = buildTrack(state.frames.map((f) => f.people), state.contact, state.ball, seed);
+    setStatus('Oyuncu seçildi. Analiz bu oyuncuya göre yenilendi.');
+    draw(); updateReady(); runAnalysis();
+    return;
+  }
+  state.ball = pt;
+  state.track = buildTrack(state.frames.map((f) => f.people), state.contact, state.ball, state.seed);
   if (!state.track[state.contact]) setStatus('Temas karesinde kimse bulunamadı. Başka bir kare seç.');
   else setStatus('Oyuncu seçildi: topa en yakın kişi. Başka biri seçildiyse topa tekrar tıkla.');
   draw(); updateReady();
