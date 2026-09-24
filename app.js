@@ -16,6 +16,7 @@ import * as pipeline from './pipeline.js?v=25';
 import { measure, measureFreeKick, buildTrack } from './metrics.js?v=25';
 import { evaluate } from './coach.js?v=25';
 import { ballFlight } from './trajectory.js?v=25';
+import { getRuleSet } from './rules.js?v=25';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');
@@ -469,6 +470,11 @@ function runAnalysis() {
   // cp-15-secmeli-menu: üçü de (açı, vuruş türü, ayak) seçilmeden analiz çalışmaz — "analyze"
   // butonu zaten disabled ama mod/ayak/açı değişince buradan da tekrar çağrılıyor (bkz. olay dinleyicileri).
   if (!mode || !foot || !angle) return;
+  // cp-16-kural-matrisi: ölçmeden ÖNCE bu (vuruş türü, ayak, açı) kombinasyonu hiç ölçülebiliyor mu
+  // diye bak (ör. frikik yandan çekilmişse). Ölçülemezse measure()/evaluate() hiç çalıştırılmaz,
+  // kullanıcıya doğrudan hangi açıdan çekmesi gerektiği söylenir.
+  const ruleSet = getRuleSet(mode, foot, angle);
+  if (ruleSet.olculemez) { renderUnmeasurable(ruleSet, mode); return; }
   try {
     let res;
     if (state.activeKick) {
@@ -484,11 +490,22 @@ function runAnalysis() {
       res = evaluate(m, mode);
     }
     if (state.activeKick) { state.activeKick.score = res.total; renderKickList(); }
-    renderReport(res, mode, viewWarning(angle));
+    renderReport(res, mode, foot, ruleSet, viewWarning(angle));
   } catch (err) { setStatus(err.message); }
 }
 
-function renderReport(res, mode, warning) {
+// cp-16-kural-matrisi: (mod, ayak, açı) kombinasyonu hiç ölçülemiyorsa (ör. frikik yandan çekilmiş)
+// measure()/evaluate() hiç çağrılmaz, doğrudan rules.js'in mesajı gösterilir.
+function renderUnmeasurable(ruleSet, mode) {
+  const el = $('report');
+  el.innerHTML = `
+    <h2>${MODE_TITLE[mode] ?? 'Vuruş'} raporu</h2>
+    <div class="coach">${ruleSet.mesaj}</div>`;
+  el.hidden = false;
+  el.scrollIntoView({ behavior: 'smooth' });
+}
+
+function renderReport(res, mode, foot, ruleSet, warning) {
   const el = $('report');
   const band = (s) => (s >= 80 ? '' : s >= 50 ? 'mid' : 'low');
   const p = state.track[state.contact];
@@ -499,8 +516,14 @@ function renderReport(res, mode, warning) {
   // cp-14a-olcum-yeterliligi: coach.js kapsam yetersizse total:null, insufficient:true döner
   // (Ronaldo'nun arkadan çekilmiş şutunda tek madde ölçülüp gerisi "ölçülemedi" iken eskiden
   // yanıltıcı bir 100 puan çıkıyordu). Puan yerine "—" göster, madde listesi yine aşağıda çıksın.
+  // cp-16-kural-matrisi: rapor başlığının altında hangi referans oyuncuya göre ölçüldüğümüz
+  // görünüyor ("Referans: Ronaldo (Ayak üstü şut, Sağ ayak)"); [T] ise referansNotu bunu açıklıyor.
+  const refLine = ruleSet?.referans
+    ? `<p class="hint">Referans: ${ruleSet.referans} (${MODE_TITLE[mode]}, ${FOOT_LABEL[foot]} ayak)${ruleSet.referansNotu ? ` — ${ruleSet.referansNotu}` : ''}</p>`
+    : '';
   el.innerHTML = `
     <h2>${MODE_TITLE[mode] ?? 'Pas'} raporu</h2>
+    ${refLine}
     <div class="score"><span class="big">${res.insufficient ? '—' : res.total}</span>${res.insufficient ? '' : '<span>/ 100</span>'}</div>
     <div class="coach">${res.verdict}${res.focus.length ? '<br><br><b>Odaklan:</b><br>' + res.focus.map((f) => `${f.tip}${f.drill ? `<br><span class="hint">Alıştırma: ${f.drill}</span>` : ''}`).join('<br><br>') : ''}</div>
     ${warning ? `<p class="warn">${warning}</p>` : ''}
