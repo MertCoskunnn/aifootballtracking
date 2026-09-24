@@ -105,3 +105,17 @@ test('kaynakMetni: etiketleri kullanıcı diline çevirir', async () => {
   assert.equal(kaynakMetni('[T]'), 'Tahmin (videolarla ayarlanacak)');
   assert.equal(kaynakMetni('[T] aşırı yatış'), 'Tahmin (videolarla ayarlanacak): aşırı yatış');
 });
+
+test('readOutcome yandan: top kameradan uzaklaşıyorsa (küçülüyor) yükseklik ve hız okunmaz', async () => {
+  const { depthTrend } = await import('../outcome.js');
+  const inl = (ws) => ws.map((w, i) => ({ t: i * 0.033, x: 0, y: 0, w }));
+  assert.equal(depthTrend(inl([20, 19, 18, 12, 10, 9])), 'uzaklaşıyor');
+  assert.equal(depthTrend(inl([20, 20, 21, 20, 19, 20])), 'yanal');
+  assert.equal(depthTrend(inl([20, 20])), null, 'az nokta: karar yok');
+  const f = { coef: { vx: 300, vy: -500, ax: 0, ay: 0 }, inliers: inl([20, 19, 18, 12, 10, 9]) };
+  const o = readOutcome(f, 'side', 50);
+  assert.equal(o.height, null);
+  assert.equal(o.speedLabel, null);
+  assert.deepEqual([...outcomeProblems(o, 'shot')], [], 'okunamayan sonuçtan sorun çıkmaz');
+  assert.match(describeOutcome(o), /kameradan uzaklaşarak gitti/);
+});

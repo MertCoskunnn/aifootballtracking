@@ -278,7 +278,8 @@ export function fitFlight(points, contactT, opts = {}) {
     contactT,
     tEnd,
     maxExtendSec,
-    inliers: idxs.map((i) => ({ t: pts[i].t, x: pts[i].x, y: pts[i].y })),
+    // w (top genişliği): outcome.js topun kameradan uzaklaşıp uzaklaşmadığını buradan anlar.
+    inliers: idxs.map((i) => ({ t: pts[i].t, x: pts[i].x, y: pts[i].y, w: pts[i].w })),
     rmsPx,
   };
 }

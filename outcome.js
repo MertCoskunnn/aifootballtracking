@@ -20,6 +20,23 @@ export const OUTCOME_T = {
 const deg = (r) => (r * 180) / Math.PI;
 
 /**
+ * Top uçarken kameraya göre derinlikte ne yapıyor? Uçuşun ilk ve son yarısındaki top genişliklerinin
+ * medyanlarını karşılaştırır. < 0.75: belirgin küçülüyor (kameradan uzaklaşıyor), > 1.33: büyüyor.
+ * Neden gerekli (Messi antrenman klibi, 2026-09-24 gece): oyuncu yandan görünüyor ama top arkadaki
+ * kaleye, yani kameradan uzağa gidiyor. Perspektif yüzünden görüntüde yukarı tırmanıp yavaşlıyor
+ * gibi görünüyor; eski kod bunu "havalandı (52°), yavaş" diye okudu. Derinlikte giden topun
+ * yandan kalkış açısı ve hızı okunamaz. Veri yetersizse null.
+ */
+export function depthTrend(inliers) {
+  const pts = (inliers || []).filter((p) => p.w > 0).sort((a, b) => a.t - b.t);
+  if (pts.length < 4) return null;
+  const med = (a) => { const s = a.map((p) => p.w).sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
+  const half = Math.floor(pts.length / 2);
+  const ratio = med(pts.slice(half)) / med(pts.slice(0, half));
+  return ratio < 0.75 ? 'uzaklaşıyor' : ratio > 1.33 ? 'yaklaşıyor' : 'yanal';
+}
+
+/**
  * fit: fitFlight çıktısı ({ coef: {vx, ax, vy, ay}, ... }) ya da null.
  * angle: 'side' | 'behind'. legPx: vuran oyuncunun bacak boyu (piksel), hız ölçeği için.
  * Dönen: null (iz yoksa) ya da { angle, launchDeg, height, speed, speedLabel, sideDeg, direction, curve }
@@ -32,7 +49,12 @@ export function readOutcome(fit, angle, legPx) {
   const { vx, vy, ax } = fit.coef;
   const v = Math.hypot(vx, vy);
   if (!(v > 0)) return null;
-  const out = { angle, launchDeg: null, height: null, speed: null, speedLabel: null, sideDeg: null, direction: null, curve: null };
+  const depth = depthTrend(fit.inliers);
+  const out = { angle, depth, launchDeg: null, height: null, speed: null, speedLabel: null, sideDeg: null, direction: null, curve: null };
+  if (angle === 'side' && depth && depth !== 'yanal') {
+    // Top derinlikte gidiyor: yandan kalkış açısı ve hız okunamaz (bkz. depthTrend). Boş bırak.
+    return out;
+  }
   if (angle === 'side') {
     // Görüntüde y aşağı doğru artar: yukarı giden topta vy < 0.
     out.launchDeg = deg(Math.atan2(-vy, Math.abs(vx)));
@@ -76,5 +98,8 @@ export function describeOutcome(o) {
   if (o.speedLabel) parts.push(o.speedLabel === 'zayıf' ? 'yavaş gitti' : 'hızlı gitti');
   if (o.direction) parts.push(o.direction === 'düz' ? 'düz gitti' : `${o.direction}a gitti`);
   if (o.curve) parts.push(o.curve === 'var' ? 'havada yana kıvrıldı (falso)' : 'kıvrılmadan gitti');
+  if (!parts.length && o.angle === 'side' && (o.depth === 'uzaklaşıyor' || o.depth === 'yaklaşıyor')) {
+    return `Top kameradan ${o.depth === 'uzaklaşıyor' ? 'uzaklaşarak' : 'yaklaşarak'} gitti; bu açıdan yüksekliği ve hızı güvenilir okunamaz.`;
+  }
   return parts.length ? `Top ${parts.join(', ')}.` : null;
 }
